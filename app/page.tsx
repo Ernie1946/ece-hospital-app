@@ -1,6 +1,8 @@
 import Link from 'next/link'
-import { redirect } from 'next/navigation'
 import { crearClienteServidor } from '@/lib/supabase/server'
+import { obtenerPerfil } from '@/lib/perfil'
+import { Encabezado } from '@/components/Encabezado'
+import { SinAlta } from '@/components/SinAlta'
 
 // ---------------------------------------------------------------------
 // Censo de camas — pantalla principal
@@ -57,44 +59,14 @@ const AISLAMIENTO: Record<string, string> = {
   aereo: 'Aislamiento aéreo',
 }
 
-async function cerrarSesion() {
-  'use server'
-  const supabase = await crearClienteServidor()
-  await supabase.auth.signOut()
-  redirect('/login')
-}
-
 export default async function CensoPage({ searchParams }: PageProps<'/'>) {
   const { servicio: filtro } = await searchParams
   const servicioElegido = typeof filtro === 'string' ? filtro : null
 
+  const { perfil, email } = await obtenerPerfil()
+  if (!perfil) return <SinAlta email={email} />
+
   const supabase = await crearClienteServidor()
-
-  // ¿Quién es? (perfil clínico en seguridad.usuario, mismo id que Authentication)
-  const { data: auth } = await supabase.auth.getUser()
-  const { data: perfil } = await supabase
-    .schema('seguridad')
-    .from('usuario')
-    .select('nombre, primer_apellido, rol')
-    .eq('id', auth.user?.id ?? '')
-    .maybeSingle()
-
-  if (!perfil) {
-    return (
-      <main className="min-h-screen flex items-center justify-center bg-slate-100 px-4">
-        <div className="max-w-md bg-white border border-slate-200 rounded-xl p-6 space-y-3">
-          <h1 className="text-lg font-semibold text-slate-900">Cuenta sin alta en el hospital</h1>
-          <p className="text-sm text-slate-600">
-            Iniciaste sesión como <strong>{auth.user?.email}</strong>, pero esta cuenta no está registrada
-            como personal del hospital. Pide al administrador que te dé de alta.
-          </p>
-          <form action={cerrarSesion}>
-            <button className="text-sm text-sky-700 underline">Cerrar sesión</button>
-          </form>
-        </div>
-      </main>
-    )
-  }
 
   const [{ data: camasData, error }, { data: ocupacionData }] = await Promise.all([
     supabase.schema('camas').from('v_censo').select('*'),
@@ -120,27 +92,16 @@ export default async function CensoPage({ searchParams }: PageProps<'/'>) {
     }))
 
   return (
-    <main className="min-h-screen bg-slate-100">
-      {/* Encabezado */}
-      <header className="bg-white border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-lg font-semibold text-slate-900">Censo de camas</h1>
-            <p className="text-xs text-slate-500">Actualizado {new Date().toLocaleString('es-MX', { timeZone: 'America/Chihuahua' })}</p>
-          </div>
-          <div className="flex items-center gap-3 text-sm">
-            <span className="text-slate-700">
-              {perfil.nombre} {perfil.primer_apellido}
-              <span className="ml-2 rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{perfil.rol.replaceAll('_', ' ')}</span>
-            </span>
-            <form action={cerrarSesion}>
-              <button className="text-sky-700 hover:underline">Salir</button>
-            </form>
-          </div>
-        </div>
-      </header>
-
+    <>
+      <Encabezado perfil={perfil} activo="censo" />
+      <main className="flex-1 bg-slate-100">
       <div className="max-w-7xl mx-auto px-4 py-4 space-y-4">
+        <div>
+          <h1 className="text-lg font-semibold text-slate-900">Censo de camas</h1>
+          <p className="text-xs text-slate-500">
+            Actualizado {new Date().toLocaleString('es-MX', { timeZone: 'America/Chihuahua' })}
+          </p>
+        </div>
         {error && (
           <p role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
             No se pudo leer el censo: {error.message}
@@ -199,6 +160,7 @@ export default async function CensoPage({ searchParams }: PageProps<'/'>) {
         ))}
       </div>
     </main>
+    </>
   )
 }
 

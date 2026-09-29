@@ -5,18 +5,19 @@ import { obtenerPerfil } from '@/lib/perfil'
 import { Encabezado } from '@/components/Encabezado'
 import { SinAlta } from '@/components/SinAlta'
 import { FormAccion } from '@/components/FormAccion'
+import { FormLiquidos } from '@/components/FormLiquidos'
 import { claseCampo, claseEtiqueta, claseTarjeta } from '@/lib/estilos'
 import { ahora, edad, fechaHora, nombreCompleto } from '@/lib/formato'
 import {
   COLOR_NIVEL,
-  CONCEPTOS_EGRESO,
-  CONCEPTOS_INGRESO,
   ESCALAS,
   RANGO_ALERTA,
   TURNOS,
   fueraDeRango,
+  describirLiquido,
   interpretarEscala,
   turnoActual,
+  type Aditivo,
   type Signos,
   type TipoEscala,
 } from '@/lib/clinica'
@@ -35,7 +36,16 @@ import {
 
 type SignosFila = Signos & { id: number; tomado_en: string; peso_kg: number | null; talla_cm: number | null; registrado_por: string }
 type Escala = { id: number; tipo: string; puntaje: number; registrado_en: string; registrado_por: string }
-type Liquido = { id: number; sentido: 'ingreso' | 'egreso'; concepto: string; volumen_ml: number; registrado_en: string }
+type Liquido = {
+  id: number
+  sentido: 'ingreso' | 'egreso'
+  concepto: string
+  producto: string | null
+  aditivos: Aditivo[]
+  velocidad_ml_h: number | null
+  volumen_ml: number
+  registrado_en: string
+}
 type Nota = {
   id: string
   contenido: { turno?: string; valoracion?: string; plan_cuidados?: string; observaciones?: string }
@@ -77,7 +87,7 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
     supabase.schema('clinico').rpc('puede_ver_encuentro', { p_encuentro: id }),
     supabase.schema('clinico').from('signos_vitales').select('*').eq('encuentro_id', id).gte('tomado_en', hace24h).order('tomado_en', { ascending: false }),
     supabase.schema('clinico').from('escala').select('id, tipo, puntaje, registrado_en, registrado_por').eq('encuentro_id', id).order('registrado_en', { ascending: false }).limit(40),
-    supabase.schema('clinico').from('liquidos').select('id, sentido, concepto, volumen_ml, registrado_en').eq('encuentro_id', id).gte('registrado_en', hace24h).order('registrado_en', { ascending: false }),
+    supabase.schema('clinico').from('liquidos').select('id, sentido, concepto, producto, aditivos, velocidad_ml_h, volumen_ml, registrado_en').eq('encuentro_id', id).gte('registrado_en', hace24h).order('registrado_en', { ascending: false }),
     supabase
       .schema('clinico')
       .from('documento_clinico')
@@ -303,7 +313,7 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
                       {listaLiquidos.map((l) => (
                         <li key={l.id} className="py-1 flex justify-between gap-2">
                           <span>
-                            {l.sentido === 'ingreso' ? '↓ Ingreso' : '↑ Egreso'} · {l.concepto}
+                            {l.sentido === 'ingreso' ? '↓ Ingreso' : '↑ Egreso'} · {describirLiquido(l)}
                           </span>
                           <span className="text-slate-600">
                             {Number(l.volumen_ml).toLocaleString('es-MX')} mL · {fechaHora(l.registrado_en)}
@@ -313,28 +323,7 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
                     </ul>
                   )}
                   {puedeRegistrar && (
-                    <FormAccion accion={registrarLiquidos.bind(null, id)} boton="Registrar" variante="secundario" className="mt-3 flex flex-wrap items-end gap-2">
-                      <label className={claseEtiqueta}>
-                        Tipo
-                        <select name="sentido" required defaultValue="ingreso" className={claseCampo}>
-                          <option value="ingreso">Ingreso</option>
-                          <option value="egreso">Egreso</option>
-                        </select>
-                      </label>
-                      <label className={claseEtiqueta}>
-                        Concepto
-                        <input name="concepto" required list="conceptos-liquidos" className={claseCampo} />
-                        <datalist id="conceptos-liquidos">
-                          {[...CONCEPTOS_INGRESO, ...CONCEPTOS_EGRESO].map((c) => (
-                            <option key={c} value={c} />
-                          ))}
-                        </datalist>
-                      </label>
-                      <label className={claseEtiqueta}>
-                        mL
-                        <input name="volumen_ml" type="number" required min={1} className={`${claseCampo} w-24`} />
-                      </label>
-                    </FormAccion>
+                    <FormLiquidos accion={registrarLiquidos.bind(null, id)} />
                   )}
                 </section>
               </div>

@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { traducirError } from '@/lib/errores'
 import type { Resultado } from '@/components/FormAccion'
+import { OTRO, describirLiquido, type Aditivo } from '@/lib/clinica'
 
 // Todas las acciones corren con la sesión de la enfermera: la base valida su
 // rol (seguridad.exigir_rol) y que el paciente sea de su servicio (seguridad por fila).
@@ -108,18 +109,44 @@ export async function registrarEscala(encuentroId: string, _previo: Resultado, d
 export async function registrarLiquidos(encuentroId: string, _previo: Resultado, datos: FormData): Promise<Resultado> {
   const { supabase, usuarioId } = await sesion()
   const sentido = texto(datos, 'sentido')
-  const concepto = texto(datos, 'concepto')
   const volumen = numero(datos, 'volumen_ml')
+  let concepto = texto(datos, 'concepto')
+  if (concepto === OTRO) concepto = texto(datos, 'concepto_otro')
+  let producto = texto(datos, 'producto')
+  if (producto === OTRO) producto = texto(datos, 'producto_otro')
   if (!sentido || !concepto || !volumen || volumen <= 0) return { error: 'Indica ingreso o egreso, concepto y volumen en mL.' }
+
+  // Aditivos: listas paralelas de nombre, cantidad y unidad
+  const nombres = datos.getAll('aditivo_nombre').map(String)
+  const cantidades = datos.getAll('aditivo_cantidad').map((v) => Number(String(v).replace(',', '.')))
+  const unidades = datos.getAll('aditivo_unidad').map(String)
+  const aditivos: Aditivo[] = []
+  for (let i = 0; i < nombres.length; i++) {
+    const nombre = nombres[i] === OTRO ? texto(datos, `aditivo_otro_${i}`) : nombres[i].trim()
+    if (!nombre || !Number.isFinite(cantidades[i]) || cantidades[i] <= 0 || !unidades[i]) {
+      return { error: `Completa el aditivo ${i + 1}: nombre, cantidad mayor a cero y unidad.` }
+    }
+    aditivos.push({ nombre, cantidad: cantidades[i], unidad: unidades[i] })
+  }
 
   const { error } = await supabase
     .schema('clinico')
     .from('liquidos')
-    .insert({ encuentro_id: encuentroId, sentido, concepto, volumen_ml: volumen, registrado_por: usuarioId })
+    .insert({
+      encuentro_id: encuentroId,
+      sentido,
+      concepto,
+      producto,
+      aditivos,
+      velocidad_ml_h: sentido === 'ingreso' ? numero(datos, 'velocidad_ml_h') : null,
+      volumen_ml: volumen,
+      registrado_por: usuarioId,
+    })
   if (error) return { error: traducirError(error.message) }
 
   refrescar(encuentroId)
-  return { ok: `${sentido === 'ingreso' ? 'Ingreso' : 'Egreso'} de ${volumen} mL registrado.` }
+  const que = describirLiquido({ concepto, producto, aditivos })
+  return { ok: `${sentido === 'ingreso' ? 'Ingreso' : 'Egreso'} de ${volumen} mL registrado (${que}).` }
 }
 
 // Nota de enfermería del turno: se guarda y se firma en un solo paso.

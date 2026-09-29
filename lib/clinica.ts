@@ -108,3 +108,49 @@ export function turnoActual(): string {
 
 export const CONCEPTOS_INGRESO = ['Vía oral', 'Solución intravenosa', 'Medicamentos IV', 'Sonda / nutrición enteral', 'Hemoderivados']
 export const CONCEPTOS_EGRESO = ['Diuresis', 'Evacuaciones', 'Vómito', 'Drenaje', 'Sonda nasogástrica', 'Sangrado']
+export const OTRO = 'Otro'
+
+// Producto por concepto de ingreso (la lista termina con "Otro", que abre un campo libre)
+export const PRODUCTOS: Record<string, string[]> = {
+  'Solución intravenosa': [
+    'NaCl 0.9 %',
+    'NaCl 0.45 %',
+    'Hartmann',
+    'Glucosa 5 %',
+    'Glucosa 10 %',
+    'Glucosa 50 %',
+    'Mixta (glucosa 5 % + NaCl 0.9 %)',
+  ],
+  'Vía oral': ['Agua', 'Dieta líquida', 'Suero oral', 'Leche / fórmula'],
+  'Sonda / nutrición enteral': ['Fórmula enteral', 'Agua libre'],
+  Hemoderivados: ['Paquete globular', 'Plasma fresco congelado', 'Concentrado plaquetario', 'Crioprecipitado', 'Albúmina'],
+}
+
+// Aditivos frecuentes de soluciones IV con su unidad habitual
+export const ADITIVOS: { nombre: string; unidad: string }[] = [
+  { nombre: 'Cloruro de potasio (KCl)', unidad: 'mEq' },
+  { nombre: 'Sulfato de magnesio', unidad: 'g' },
+  { nombre: 'Gluconato de calcio', unidad: 'g' },
+  { nombre: 'Bicarbonato de sodio', unidad: 'mEq' },
+  { nombre: 'Cloruro de sodio 17.7 %', unidad: 'mEq' },
+  { nombre: 'Fosfato de potasio', unidad: 'mmol' },
+  { nombre: 'Insulina rápida', unidad: 'UI' },
+  { nombre: 'Multivitamínico', unidad: 'ámpula' },
+]
+export const UNIDADES_ADITIVO = ['mEq', 'mmol', 'g', 'mg', 'UI', 'mL', 'ámpula']
+
+export type Aditivo = { nombre: string; cantidad: number; unidad: string }
+
+// "Solución intravenosa: Hartmann + KCl 20 mEq · 125 mL/h"
+export function describirLiquido(l: {
+  concepto: string
+  producto?: string | null
+  aditivos?: Aditivo[] | null
+  velocidad_ml_h?: number | null
+}): string {
+  let texto = l.concepto
+  if (l.producto) texto += `: ${l.producto}`
+  for (const a of l.aditivos ?? []) texto += ` + ${a.nombre} ${Number(a.cantidad).toLocaleString('es-MX')} ${a.unidad}`
+  if (l.velocidad_ml_h) texto += ` · ${Number(l.velocidad_ml_h).toLocaleString('es-MX')} mL/h`
+  return texto
+}

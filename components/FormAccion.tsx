@@ -12,18 +12,28 @@ export function FormAccion({
   children,
   className = 'space-y-3',
   variante = 'primario',
+  alGuardar,
 }: {
   accion: (previo: Resultado, datos: FormData) => Promise<Resultado>
   boton: string
   children?: React.ReactNode
   className?: string
   variante?: 'primario' | 'secundario'
+  alGuardar?: () => void
 }) {
   const [estado, ejecutar, pendiente] = useActionState(accion, null)
   const formulario = useRef<HTMLFormElement>(null)
+  const avisar = useRef(alGuardar)
 
   useEffect(() => {
-    if (estado?.ok) formulario.current?.reset()
+    avisar.current = alGuardar
+  }, [alGuardar])
+
+  useEffect(() => {
+    if (estado?.ok) {
+      formulario.current?.reset()
+      avisar.current?.()
+    }
   }, [estado])
 
   return (

@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Parches y SQL de la base (no van en el repositorio de la app)
+parche-*.sh
+*.sql

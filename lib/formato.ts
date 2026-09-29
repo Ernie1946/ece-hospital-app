@@ -55,3 +55,9 @@ export const ESTADO_ENCUENTRO: Record<string, string> = {
 }
 
 export const SEXO: Record<string, string> = { H: 'Hombre', M: 'Mujer', NE: 'No especificado' }
+
+// Momento actual en milisegundos. Las páginas se generan en cada visita,
+// así que "ahora" es la hora de la consulta.
+export function ahora() {
+  return Date.now()
+}

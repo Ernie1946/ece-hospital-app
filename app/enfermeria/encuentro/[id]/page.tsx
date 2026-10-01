@@ -6,6 +6,7 @@ import { Encabezado } from '@/components/Encabezado'
 import { SinAlta } from '@/components/SinAlta'
 import { FormAccion } from '@/components/FormAccion'
 import { FormLiquidos } from '@/components/FormLiquidos'
+import { CampoDictado } from '@/components/CampoDictado'
 import { claseCampo, claseEtiqueta, claseTarjeta } from '@/lib/estilos'
 import { ahora, edad, fechaHora, nombreCompleto } from '@/lib/formato'
 import {
@@ -341,18 +342,15 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
                         ))}
                       </select>
                     </label>
-                    <label className={claseEtiqueta}>
-                      Valoración *
-                      <textarea name="valoracion" required rows={3} className={claseCampo} placeholder="Estado general, neurológico, respiratorio, herida, accesos venosos…" />
-                    </label>
-                    <label className={claseEtiqueta}>
-                      Plan de cuidados
-                      <textarea name="plan_cuidados" rows={2} className={claseCampo} />
-                    </label>
-                    <label className={claseEtiqueta}>
-                      Observaciones / entrega de turno
-                      <textarea name="observaciones" rows={2} className={claseCampo} />
-                    </label>
+                    <CampoDictado
+                      name="valoracion"
+                      etiqueta="Valoración *"
+                      required
+                      rows={3}
+                      placeholder="Estado general, neurológico, respiratorio, herida, accesos venosos…"
+                    />
+                    <CampoDictado name="plan_cuidados" etiqueta="Plan de cuidados" rows={2} />
+                    <CampoDictado name="observaciones" etiqueta="Observaciones / entrega de turno" rows={2} />
                     <p className="text-xs text-slate-500">
                       Al firmar, la nota queda sellada con tu nombre, cédula y hora, y ya no puede modificarse (NOM-004).
                     </p>

@@ -28,7 +28,9 @@ import {
   registrarLiquidos,
   registrarSignos,
   solicitarAccesoEmergencia,
+  validarOrden,
 } from '../../acciones'
+import { PRIORIDADES, TIPO_ORDEN, estadoOrden } from '@/lib/medica'
 
 // ---------------------------------------------------------------------
 // Hoja de enfermería: signos vitales, escalas, control de líquidos y
@@ -46,6 +48,15 @@ type Liquido = {
   velocidad_ml_h: number | null
   volumen_ml: number
   registrado_en: string
+}
+type Orden = {
+  id: string
+  tipo: string
+  estado: string
+  prioridad: string
+  detalle: { descripcion?: string; indicaciones?: string }
+  solicitada_en: string | null
+  ordenada_por: string
 }
 type Nota = {
   id: string
@@ -80,7 +91,7 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
 
   const hace24h = new Date(ahora() - 24 * 3600 * 1000).toISOString()
 
-  const [paciente, alergias, cama, medico, acceso, signos, escalas, liquidos, notas] = await Promise.all([
+  const [paciente, alergias, cama, medico, acceso, signos, escalas, liquidos, notas, ordenes] = await Promise.all([
     supabase.schema('clinico').from('paciente').select('nombre, primer_apellido, segundo_apellido, expediente, fecha_nacimiento, sexo, tipo_sangre').eq('id', encuentro.paciente_id).single(),
     supabase.schema('clinico').from('paciente_alergia').select('sustancia, severidad').eq('paciente_id', encuentro.paciente_id).eq('activa', true),
     supabase.schema('camas').from('v_censo').select('cama, servicio_nombre').eq('encuentro_id', id).maybeSingle(),
@@ -98,6 +109,13 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
       .eq('estado', 'firmado')
       .order('firmado_en', { ascending: false })
       .limit(20),
+    supabase
+      .schema('clinico')
+      .from('orden')
+      .select('id, tipo, estado, prioridad, detalle, solicitada_en, ordenada_por')
+      .eq('encuentro_id', id)
+      .in('estado', ['solicitada', 'validada', 'en_proceso'])
+      .order('solicitada_en', { ascending: false }),
   ])
 
   const p = paciente.data
@@ -113,9 +131,14 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
   const listaEscalas = (escalas.data ?? []) as Escala[]
   const listaLiquidos = (liquidos.data ?? []) as Liquido[]
   const listaNotas = (notas.data ?? []) as Nota[]
+  const listaOrdenes = (ordenes.data ?? []) as Orden[]
+  const porValidar = listaOrdenes.filter((o) => o.tipo === 'medicamento' && o.estado === 'solicitada')
+  const activas = listaOrdenes.filter((o) => !porValidar.includes(o))
 
   // Nombres de quien registró
-  const ids = Array.from(new Set([...listaSignos.map((s) => s.registrado_por), ...listaEscalas.map((e) => e.registrado_por)]))
+  const ids = Array.from(
+    new Set([...listaSignos.map((s) => s.registrado_por), ...listaEscalas.map((e) => e.registrado_por), ...listaOrdenes.map((o) => o.ordenada_por)])
+  )
   const { data: personal } = ids.length
     ? await supabase.schema('seguridad').from('usuario').select('id, nombre, primer_apellido').in('id', ids)
     : { data: [] }
@@ -135,9 +158,14 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
       <Encabezado perfil={perfil} activo="enfermeria" />
       <main className="flex-1 bg-slate-100">
         <div className="max-w-6xl mx-auto px-4 py-4 space-y-4">
-          <Link href="/enfermeria" className="text-sm text-sky-700 hover:underline">
-            ← Tablero de enfermería
-          </Link>
+          <div className="flex flex-wrap justify-between gap-2 text-sm">
+            <Link href="/enfermeria" className="text-sky-700 hover:underline">
+              ← Tablero de enfermería
+            </Link>
+            <Link href={`/medicos/encuentro/${id}`} className="text-sky-700 hover:underline">
+              Expediente médico →
+            </Link>
+          </div>
 
           {/* Identificación */}
           <section className={claseTarjeta}>
@@ -199,6 +227,64 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
 
           {puedeVer && (
             <>
+              {/* Órdenes médicas */}
+              <section className={claseTarjeta}>
+                <h2 className="text-sm font-semibold text-slate-800">Órdenes médicas</h2>
+                {porValidar.length > 0 && (
+                  <div className="mt-2 space-y-2">
+                    <p className="text-xs font-semibold uppercase text-amber-800">Medicamentos por validar ({porValidar.length})</p>
+                    {porValidar.map((o) => (
+                      <div key={o.id} className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
+                        <p className="font-medium text-slate-900">
+                          {o.prioridad !== 'rutina' && (
+                            <span className="mr-1 rounded bg-red-100 px-1 text-xs text-red-800">{PRIORIDADES[o.prioridad]}</span>
+                          )}
+                          {o.detalle?.descripcion}
+                        </p>
+                        {o.detalle?.indicaciones && <p className="text-slate-700">{o.detalle.indicaciones}</p>}
+                        <p className="text-xs text-slate-500">
+                          Dr(a). {quien.get(o.ordenada_por) ?? '—'} · {fechaHora(o.solicitada_en)}
+                        </p>
+                        {puedeRegistrar && (
+                          <div className="mt-2 flex flex-wrap items-end gap-3">
+                            <FormAccion accion={validarOrden.bind(null, o.id, id, true)} boton="Validar" className="flex items-center gap-2" />
+                            <FormAccion
+                              accion={validarOrden.bind(null, o.id, id, false)}
+                              boton="Devolver al médico"
+                              variante="secundario"
+                              className="flex flex-wrap items-end gap-2"
+                            >
+                              <label className={claseEtiqueta}>
+                                Motivo de devolución
+                                <input name="motivo" className={claseCampo} placeholder="Dosis, vía, alergia, duplicada…" />
+                              </label>
+                            </FormAccion>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {activas.length === 0 && porValidar.length === 0 ? (
+                  <p className="mt-2 text-sm text-slate-500">Sin órdenes vigentes.</p>
+                ) : (
+                  activas.length > 0 && (
+                    <ul className="mt-2 divide-y divide-slate-100 text-sm">
+                      {activas.map((o) => {
+                        const e = estadoOrden(o.tipo, o.estado)
+                        return (
+                          <li key={o.id} className="py-1">
+                            <span className={`mr-1 rounded px-1 text-xs ${e.color}`}>{e.texto}</span>
+                            <span className="text-slate-500">{TIPO_ORDEN[o.tipo]}:</span> {o.detalle?.descripcion}
+                            {o.detalle?.indicaciones ? ` (${o.detalle.indicaciones})` : ''}
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  )
+                )}
+              </section>
+
               {/* Signos vitales */}
               <section className={claseTarjeta}>
                 <h2 className="text-sm font-semibold text-slate-800">Signos vitales (últimas 24 h)</h2>

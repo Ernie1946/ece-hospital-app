@@ -199,3 +199,24 @@ export async function solicitarAccesoEmergencia(
   refrescar(encuentroId)
   return { ok: 'Acceso de emergencia registrado por 8 horas.' }
 }
+
+// Validación de órdenes de medicamento antes de que farmacia las prepare
+export async function validarOrden(
+  ordenId: string,
+  encuentroId: string,
+  aprobar: boolean,
+  _previo: Resultado,
+  datos: FormData
+): Promise<Resultado> {
+  const { supabase } = await sesion()
+  const motivo = texto(datos, 'motivo')
+  if (!aprobar && !motivo) return { error: 'Indica al médico por qué se devuelve la orden.' }
+  const { error } = await supabase
+    .schema('clinico')
+    .rpc('validar_orden', { p_orden: ordenId, p_aprobar: aprobar, p_motivo: motivo })
+  if (error) return { error: traducirError(error.message) }
+  refrescar(encuentroId)
+  revalidatePath('/medicos')
+  revalidatePath(`/medicos/encuentro/${encuentroId}`)
+  return { ok: aprobar ? 'Orden validada; pasa a farmacia.' : 'Orden devuelta al médico.' }
+}

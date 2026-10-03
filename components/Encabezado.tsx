@@ -6,6 +6,7 @@ import type { Perfil } from '@/lib/perfil'
 const SECCIONES = [
   { href: '/', clave: 'censo', nombre: 'Censo' },
   { href: '/admision', clave: 'admision', nombre: 'Admisión' },
+  { href: '/medicos', clave: 'medicos', nombre: 'Médicos' },
   { href: '/enfermeria', clave: 'enfermeria', nombre: 'Enfermería' },
 ] as const
 

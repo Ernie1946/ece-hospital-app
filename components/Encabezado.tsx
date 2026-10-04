@@ -8,6 +8,7 @@ const SECCIONES = [
   { href: '/admision', clave: 'admision', nombre: 'Admisión' },
   { href: '/medicos', clave: 'medicos', nombre: 'Médicos' },
   { href: '/enfermeria', clave: 'enfermeria', nombre: 'Enfermería' },
+  { href: '/anestesia', clave: 'anestesia', nombre: 'Anestesia' },
 ] as const
 
 export function Encabezado({

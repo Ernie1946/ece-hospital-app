@@ -136,9 +136,16 @@ export default async function ExpedienteMedicoPage({ params }: PageProps<'/medic
             <Link href="/medicos" className="text-sky-700 hover:underline">
               ← Tablero médico
             </Link>
-            <Link href={`/enfermeria/encuentro/${id}`} className="text-sky-700 hover:underline">
-              Hoja de enfermería →
-            </Link>
+            <span className="flex gap-4">
+              {medicoSesion && vigente && (
+                <Link href={`/anestesia?encuentro=${id}#programar`} className="text-sky-700 hover:underline">
+                  Programar cirugía
+                </Link>
+              )}
+              <Link href={`/enfermeria/encuentro/${id}`} className="text-sky-700 hover:underline">
+                Hoja de enfermería →
+              </Link>
+            </span>
           </div>
 
           {/* Identificación */}

@@ -182,6 +182,7 @@ export function alertasLaboratorio(l: Record<string, string | undefined>) {
 export const ESTADO_CIRUGIA: Record<string, { texto: string; color: string }> = {
   programada: { texto: 'Programada', color: 'bg-sky-100 text-sky-900' },
   en_quirofano: { texto: 'En quirófano', color: 'bg-emerald-100 text-emerald-900' },
+  en_recuperacion: { texto: 'En recuperación', color: 'bg-violet-100 text-violet-900' },
   terminada: { texto: 'Terminada', color: 'bg-slate-100 text-slate-700' },
   cancelada: { texto: 'Cancelada', color: 'bg-red-100 text-red-800 line-through' },
 }

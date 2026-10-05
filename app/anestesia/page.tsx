@@ -31,6 +31,7 @@ type Cirugia = {
   asa: string | null
   cama: string | null
   alergias: string | null
+  aldrete: number | null
 }
 
 const ROLES_PROGRAMAN = ['medico_tratante', 'medico_residente', 'anestesiologo', 'admision']
@@ -65,7 +66,7 @@ export default async function AnestesiaPage({ searchParams }: PageProps<'/aneste
     supabase
       .schema('clinico')
       .from('v_agenda_quirurgica')
-      .select('id, inicio_programado, duracion_min, tipo, estado, procedimiento, sala, paciente, sexo, edad, cirujano, anestesiologo, anestesiologo_id, valoracion_id, asa, cama, alergias')
+      .select('id, inicio_programado, duracion_min, tipo, estado, procedimiento, sala, paciente, sexo, edad, cirujano, anestesiologo, anestesiologo_id, valoracion_id, asa, cama, alergias, aldrete')
       .gte('inicio_programado', desde)
       .lt('inicio_programado', hasta)
       .order('inicio_programado'),
@@ -202,6 +203,11 @@ export default async function AnestesiaPage({ searchParams }: PageProps<'/aneste
                                 <span className={`rounded px-1 font-medium ${COLOR_ASA[c.asa ?? ''] ?? 'bg-slate-100'}`}>Valorado · ASA {c.asa}</span>
                               ) : (
                                 c.estado !== 'cancelada' && <span className="rounded bg-amber-100 px-1 text-amber-900">Valoración pendiente</span>
+                              )}
+                              {c.estado === 'en_recuperacion' && (
+                                <span className="rounded bg-violet-100 px-1 text-violet-900">
+                                  {c.aldrete === null ? 'Sin Aldrete' : `Aldrete ${c.aldrete}/10`}
+                                </span>
                               )}
                               {c.alergias && <span className="rounded bg-red-100 px-1 text-red-800">Alergia: {c.alergias}</span>}
                             </div>

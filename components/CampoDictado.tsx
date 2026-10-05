@@ -16,12 +16,14 @@ export function CampoDictado({
   rows = 3,
   required,
   placeholder,
+  defaultValue,
 }: {
   name: string
   etiqueta: string
   rows?: number
   required?: boolean
   placeholder?: string
+  defaultValue?: string
 }) {
   const [estado, setEstado] = useState<Estado>('listo')
   const [segundos, setSegundos] = useState(0)
@@ -140,6 +142,7 @@ export function CampoDictado({
         rows={rows}
         required={required}
         placeholder={placeholder}
+        defaultValue={defaultValue}
         className={claseCampo}
       />
       {error && (

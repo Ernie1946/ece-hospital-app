@@ -44,6 +44,8 @@ const NOMBRE_NOTA: Record<string, string> = {
   nota_preoperatoria: 'Nota preoperatoria',
   nota_postoperatoria: 'Nota postoperatoria',
   nota_preanestesica: 'Nota preanestésica',
+  registro_anestesico: 'Registro transanestésico',
+  nota_postanestesica: 'Nota postanestésica (alta de recuperación)',
   nota_traslado: 'Nota de traslado',
   nota_preegreso: 'Nota de preegreso',
   nota_egreso: 'Nota de egreso',
@@ -238,6 +240,17 @@ export default async function ExpedienteMedicoPage({ params }: PageProps<'/medic
                                 </div>
                               ))}
                           </dl>
+                          {['nota_preanestesica', 'registro_anestesico', 'nota_postanestesica'].includes(n.tipo) && n.contenido.cirugia_id && (
+                            <p className="mt-1 text-slate-700">
+                              {n.contenido.procedimiento}
+                              {n.tipo === 'nota_preanestesica' && n.contenido.asa ? ` · ASA ${n.contenido.asa}` : ''}
+                              {n.tipo === 'registro_anestesico' && n.contenido.tipo_anestesia ? ` · ${n.contenido.tipo_anestesia}` : ''}
+                              {n.tipo === 'nota_postanestesica' ? ` · Aldrete ${n.contenido.aldrete_final}/10 · destino ${n.contenido.destino}` : ''}{' '}
+                              <Link href={`/anestesia/cirugia/${n.contenido.cirugia_id}`} className="text-sky-700 hover:underline">
+                                Ver en Anestesia →
+                              </Link>
+                            </p>
+                          )}
                           {ords.length > 0 && (
                             <div className="mt-2">
                               <p className="font-medium text-slate-700">Órdenes:</p>

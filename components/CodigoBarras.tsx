@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react'
 import JsBarcode from 'jsbarcode'
 
 // Código de barras CODE128 (el que leen los escáneres de farmacia y enfermería)
-export function CodigoBarras({ valor, alto = 40 }: { valor: string; alto?: number }) {
+export function CodigoBarras({ valor, alto = 40, ancho = 1.6 }: { valor: string; alto?: number; ancho?: number }) {
   const svg = useRef<SVGSVGElement>(null)
 
   useEffect(() => {
@@ -12,13 +12,13 @@ export function CodigoBarras({ valor, alto = 40 }: { valor: string; alto?: numbe
       JsBarcode(svg.current, valor, {
         format: 'CODE128',
         height: alto,
-        width: 1.6,
+        width: ancho,
         margin: 0,
         fontSize: 12,
         displayValue: true,
       })
     }
-  }, [valor, alto])
+  }, [valor, alto, ancho])
 
-  return <svg ref={svg} role="img" aria-label={`Código de barras ${valor}`} />
+  return <svg ref={svg} className="max-w-full h-auto" role="img" aria-label={`Código de barras ${valor}`} />
 }

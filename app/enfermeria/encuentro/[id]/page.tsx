@@ -29,7 +29,14 @@ import {
   registrarSignos,
   solicitarAccesoEmergencia,
   validarOrden,
+  administrarDosis,
+  omitirDosis,
+  recibirEnvio,
+  solicitarPrn,
 } from '../../acciones'
+import { BotonAccion } from '@/components/BotonAccion'
+import { AdministrarDosis } from '@/components/AdministrarDosis'
+import { ESTADO_DOSIS, cantidad, horaCorta } from '@/lib/farmacia'
 import { PRIORIDADES, TIPO_ORDEN, estadoOrden } from '@/lib/medica'
 
 // ---------------------------------------------------------------------
@@ -57,6 +64,23 @@ type Orden = {
   detalle: { descripcion?: string; indicaciones?: string }
   solicitada_en: string | null
   ordenada_por: string
+}
+type DosisPiso = {
+  id: string
+  orden_id: string
+  medicamento: string
+  concentracion: string
+  dosis: number
+  unidad_dosis: string
+  via: string
+  hora_programada: string
+  estado: string
+  envio_id: string | null
+  alto_riesgo: boolean
+  grupo_controlado: string | null
+  prn: boolean
+  motivo: string | null
+  administrado_en: string | null
 }
 type Nota = {
   id: string
@@ -120,6 +144,31 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
 
   const p = paciente.data
   if (!p) notFound()
+
+  // Medicación del paciente (dosis unitarias de farmacia) y órdenes PRN
+  const ordenesMed = ((ordenes.data ?? []) as Orden[]).filter((o) => o.tipo === 'medicamento' && ['validada', 'en_proceso'].includes(o.estado))
+  const [dosisQ, prnQ, enfermerasQ] = await Promise.all([
+    supabase
+      .schema('farmacia')
+      .from('v_dosis')
+      .select('id, orden_id, medicamento, concentracion, dosis, unidad_dosis, via, hora_programada, estado, envio_id, alto_riesgo, grupo_controlado, prn, motivo, administrado_en')
+      .eq('encuentro_id', id)
+      .gte('hora_programada', hace24h)
+      .neq('estado', 'cancelada')
+      .order('hora_programada'),
+    ordenesMed.length
+      ? supabase.schema('farmacia').from('orden_medicamento').select('orden_id').eq('prn', true).in('orden_id', ordenesMed.map((o) => o.id))
+      : Promise.resolve({ data: [] }),
+    supabase.schema('seguridad').from('usuario').select('id, nombre, primer_apellido').eq('rol', 'enfermeria').eq('activo', true).neq('id', perfil.id).order('primer_apellido'),
+  ])
+  const listaDosis = (dosisQ.data ?? []) as DosisPiso[]
+  const idsPrn = new Set(((prnQ.data ?? []) as { orden_id: string }[]).map((x) => x.orden_id))
+  const ordenesPrn = ordenesMed.filter((o) => idsPrn.has(o.id))
+  const enviosPendientes = [...new Set(listaDosis.filter((d) => d.estado === 'enviada' && d.envio_id).map((d) => d.envio_id as string))]
+  const verificadores = ((enfermerasQ.data ?? []) as { id: string; nombre: string; primer_apellido: string }[]).map((u) => ({
+    id: u.id,
+    texto: `${u.nombre} ${u.primer_apellido}`,
+  }))
 
   const puedeVer = acceso.data === true
   const esEnfermeria = perfil.rol === 'enfermeria'
@@ -282,6 +331,72 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
                       })}
                     </ul>
                   )
+                )}
+              </section>
+
+              {/* Medicación */}
+              <section className={claseTarjeta}>
+                <h2 className="text-sm font-semibold text-slate-800">Medicación (últimas 24 h y próximas)</h2>
+                {enviosPendientes.length > 0 && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 p-2 text-sm text-violet-900">
+                    Llegó por tubo: {listaDosis.filter((d) => d.estado === 'enviada').length} dosis.
+                    {puedeRegistrar &&
+                      enviosPendientes.map((e) => <BotonAccion key={e} etiqueta="Recibir envío" alHacer={recibirEnvio.bind(null, e, id)} />)}
+                  </div>
+                )}
+                {puedeRegistrar && listaDosis.length > 0 && (
+                  <div className="mt-2">
+                    <AdministrarDosis accion={administrarDosis.bind(null, id)} verificadores={verificadores} />
+                  </div>
+                )}
+                {ordenesPrn.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    <p className="text-xs font-semibold uppercase text-slate-500">PRN (por razón necesaria)</p>
+                    {ordenesPrn.map((o) => (
+                      <div key={o.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                        <span>{o.detalle?.descripcion}</span>
+                        {puedeRegistrar && <BotonAccion etiqueta="Solicitar dosis" variante="secundario" alHacer={solicitarPrn.bind(null, o.id, id)} />}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {listaDosis.length === 0 ? (
+                  <p className="mt-2 text-sm text-slate-500">Sin dosis de farmacia en este periodo.</p>
+                ) : (
+                  <ul className="mt-2 divide-y divide-slate-100 text-sm">
+                    {listaDosis.map((d) => {
+                      const e = ESTADO_DOSIS[d.estado]
+                      return (
+                        <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 py-1">
+                          <span className="flex flex-wrap items-center gap-1">
+                            <span className="font-semibold text-sky-800">{horaCorta(d.hora_programada)}</span>
+                            <span className={`rounded px-1 text-xs ${e?.color}`}>{e?.texto}</span>
+                            <strong>{d.medicamento}</strong> {cantidad(d.dosis)} {d.unidad_dosis} {d.via}
+                            {d.alto_riesgo && <span className="rounded bg-red-100 px-1 text-xs text-red-800">Alto riesgo</span>}
+                            {d.grupo_controlado && <span className="rounded bg-purple-100 px-1 text-xs text-purple-800">Controlado {d.grupo_controlado}</span>}
+                            {d.administrado_en && <span className="text-xs text-emerald-800">· administrada {horaCorta(d.administrado_en)}</span>}
+                            {d.motivo && d.estado === 'omitida' && <span className="text-xs text-red-700">· {d.motivo}</span>}
+                          </span>
+                          {puedeRegistrar && ['enviada', 'recibida'].includes(d.estado) && (
+                            <details>
+                              <summary className="cursor-pointer text-xs text-red-700">No se administró</summary>
+                              <FormAccion
+                                accion={omitirDosis.bind(null, d.id, id)}
+                                boton="Registrar omisión"
+                                variante="secundario"
+                                className="mt-1 flex flex-wrap items-end gap-2"
+                              >
+                                <label className={claseEtiqueta}>
+                                  Motivo
+                                  <input name="motivo" required placeholder="Ayuno, rechazo, fuera de piso…" className={claseCampo} />
+                                </label>
+                              </FormAccion>
+                            </details>
+                          )}
+                        </li>
+                      )
+                    })}
+                  </ul>
                 )}
               </section>
 

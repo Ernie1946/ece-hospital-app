@@ -220,3 +220,54 @@ export async function validarOrden(
   revalidatePath(`/medicos/encuentro/${encuentroId}`)
   return { ok: aprobar ? 'Orden validada; pasa a farmacia.' : 'Orden devuelta al médico.' }
 }
+
+// ---------------------------------------------------------------------
+// Medicación: recibir del tubo, pedir PRN, administrar y omitir
+// ---------------------------------------------------------------------
+export async function recibirEnvio(envioId: string, encuentroId: string): Promise<Resultado> {
+  const { supabase } = await sesion()
+  const { data, error } = await supabase.schema('farmacia').rpc('recibir_envio', { p_envio: envioId })
+  if (error) return { error: traducirError(error.message) }
+  refrescar(encuentroId)
+  revalidatePath('/farmacia')
+  return { ok: `Envío recibido: ${data} dosis en piso.` }
+}
+
+export async function solicitarPrn(ordenId: string, encuentroId: string): Promise<Resultado> {
+  const { supabase } = await sesion()
+  const { error } = await supabase.schema('farmacia').rpc('solicitar_prn', { p_orden: ordenId })
+  if (error) return { error: traducirError(error.message) }
+  refrescar(encuentroId)
+  revalidatePath('/farmacia')
+  return { ok: 'Dosis PRN solicitada a farmacia.' }
+}
+
+export async function administrarDosis(encuentroId: string, _previo: Resultado, datos: FormData): Promise<Resultado> {
+  const { supabase } = await sesion()
+  const pulsera = texto(datos, 'pulsera')
+  const etiqueta = texto(datos, 'etiqueta')
+  if (!pulsera || !etiqueta) return { error: 'Escanea la pulsera del paciente y la etiqueta de la dosis.' }
+  const { data, error } = await supabase.schema('farmacia').rpc('administrar', {
+    p_pulsera: pulsera,
+    p_etiqueta: etiqueta,
+    p_doble_verificador: texto(datos, 'verificador'),
+    p_observaciones: texto(datos, 'observaciones'),
+  })
+  if (error) return { error: traducirError(error.message) }
+  const r = (data as { ok: boolean; mensaje: string }[] | null)?.[0]
+  refrescar(encuentroId)
+  revalidatePath('/farmacia')
+  if (!r?.ok) return { error: `✗ ${r?.mensaje ?? 'No se pudo administrar'}` }
+  return { ok: `✓ ${r.mensaje}` }
+}
+
+export async function omitirDosis(dispensacionId: string, encuentroId: string, _previo: Resultado, datos: FormData): Promise<Resultado> {
+  const { supabase } = await sesion()
+  const motivo = texto(datos, 'motivo')
+  if (!motivo) return { error: 'Indica por qué no se administró.' }
+  const { error } = await supabase.schema('farmacia').rpc('omitir', { p_dispensacion: dispensacionId, p_motivo: motivo })
+  if (error) return { error: traducirError(error.message) }
+  refrescar(encuentroId)
+  revalidatePath('/farmacia')
+  return { ok: 'Dosis registrada como no administrada.' }
+}

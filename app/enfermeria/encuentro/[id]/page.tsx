@@ -37,6 +37,9 @@ import {
 import { BotonAccion } from '@/components/BotonAccion'
 import { AdministrarDosis } from '@/components/AdministrarDosis'
 import { ESTADO_DOSIS, cantidad, horaCorta } from '@/lib/farmacia'
+import { PlanCuidados } from '@/components/PlanCuidados'
+import { sugerencias, type DiagnosticoEnf, type EvaluacionPlan, type PlanCuidado } from '@/lib/cuidados'
+import { cerrarPlanCuidado, crearPlanCuidado, evaluarPlanCuidado } from '../../acciones'
 import { PRIORIDADES, TIPO_ORDEN, estadoOrden } from '@/lib/medica'
 
 // ---------------------------------------------------------------------
@@ -85,7 +88,7 @@ type DosisPiso = {
 }
 type Nota = {
   id: string
-  contenido: { turno?: string; valoracion?: string; plan_cuidados?: string; observaciones?: string }
+  contenido: { turno?: string; valoracion?: string; plan_cuidados?: string; observaciones?: string; planes?: string | null }
   firmado_en: string
   firma: { nombre_firmante: string; cedula: string; hash_sha256: string }[]
 }
@@ -203,6 +206,41 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
   // Última medición de cada escala
   const ultimaEscala = new Map<string, Escala>()
   for (const e of listaEscalas) if (!ultimaEscala.has(e.tipo)) ultimaEscala.set(e.tipo, e)
+
+  // Planes de cuidados: catálogo, planes del ingreso y sus evaluaciones
+  const [catQ, planesQ] = await Promise.all([
+    supabase
+      .schema('catalogo')
+      .from('diagnostico_enfermeria')
+      .select('id, clave, etiqueta, tipo, dominio, resultado_esperado, intervenciones, disparador, disparador_op, disparador_valor')
+      .eq('activo', true)
+      .order('etiqueta'),
+    supabase.schema('clinico').from('plan_cuidado').select('*').eq('encuentro_id', id).order('creado_en'),
+  ])
+  const catalogoDx = (catQ.data ?? []) as DiagnosticoEnf[]
+  const planes = (planesQ.data ?? []) as PlanCuidado[]
+  const { data: evalQ } = planes.length
+    ? await supabase.schema('clinico').from('plan_evaluacion').select('*').in('plan_id', planes.map((x) => x.id)).order('registrado_en')
+    : { data: [] }
+  const evaluacionesPlan = (evalQ ?? []) as EvaluacionPlan[]
+  const idsEval = [...new Set(evaluacionesPlan.map((e) => e.registrado_por))].filter((u) => !quien.has(u))
+  if (idsEval.length) {
+    const { data: mas } = await supabase.schema('seguridad').from('usuario').select('id, nombre, primer_apellido').in('id', idsEval)
+    for (const u of mas ?? []) quien.set(u.id as string, `${u.nombre} ${u.primer_apellido}`)
+  }
+  const ultimoSigno = listaSignos[0]
+  const sugeridos = sugerencias(
+    catalogoDx,
+    {
+      caidas_morse: ultimaEscala.get('caidas_morse')?.puntaje,
+      braden: ultimaEscala.get('braden')?.puntaje,
+      dolor_eva: ultimaEscala.get('dolor_eva')?.puntaje ?? ultimoSigno?.dolor_eva,
+      glasgow: ultimaEscala.get('glasgow')?.puntaje,
+      temperatura: ultimoSigno?.temperatura,
+      spo2: ultimoSigno?.spo2,
+    },
+    new Set(planes.filter((x) => x.estado === 'activo').map((x) => x.diagnostico_id))
+  )
 
   // Balance de líquidos 24 h
   const ingresos = listaLiquidos.filter((l) => l.sentido === 'ingreso').reduce((t, l) => t + Number(l.volumen_ml), 0)
@@ -561,6 +599,22 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
                 </section>
               </div>
 
+              {/* Plan de cuidados */}
+              <section className={claseTarjeta}>
+                <h2 className="mb-2 text-sm font-semibold text-slate-800">Plan de cuidados de enfermería</h2>
+                <PlanCuidados
+                  catalogo={catalogoDx}
+                  planes={planes}
+                  evaluaciones={evaluacionesPlan.map((e) => ({ ...e, nombre: quien.get(e.registrado_por) ?? '—' }))}
+                  sugeridos={sugeridos}
+                  turnoInicial={turnoActual()}
+                  puedeRegistrar={puedeRegistrar}
+                  crear={crearPlanCuidado.bind(null, id)}
+                  evaluar={Object.fromEntries(planes.map((x) => [x.id, evaluarPlanCuidado.bind(null, x.id, id)]))}
+                  cerrar={Object.fromEntries(planes.map((x) => [x.id, cerrarPlanCuidado.bind(null, x.id, id)]))}
+                />
+              </section>
+
               {/* Notas de enfermería */}
               <section className={claseTarjeta}>
                 <h2 className="text-sm font-semibold text-slate-800">Notas de enfermería</h2>
@@ -602,6 +656,9 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
                           <p className="mt-1 whitespace-pre-line text-slate-900">{n.contenido.valoracion}</p>
                           {n.contenido.plan_cuidados && (
                             <p className="mt-1 whitespace-pre-line text-slate-700"><strong>Plan:</strong> {n.contenido.plan_cuidados}</p>
+                          )}
+                          {n.contenido.planes && (
+                            <p className="mt-1 whitespace-pre-line text-slate-700"><strong>Planes de cuidados:</strong>{'\n'}{n.contenido.planes}</p>
                           )}
                           {n.contenido.observaciones && (
                             <p className="mt-1 whitespace-pre-line text-slate-700"><strong>Observaciones:</strong> {n.contenido.observaciones}</p>

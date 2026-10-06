@@ -162,10 +162,37 @@ export async function firmarNotaEnfermeria(encuentroId: string, _previo: Resulta
   }
   if (!contenido.turno || !contenido.valoracion) return { error: 'El turno y la valoración son obligatorios.' }
 
+  // Resumen de los planes de cuidados activos con su evaluación más reciente (últimas 12 h)
+  const { data: planes } = await supabase
+    .schema('clinico')
+    .from('plan_cuidado')
+    .select('id, etiqueta, meta, puntuacion_inicial')
+    .eq('encuentro_id', encuentroId)
+    .eq('estado', 'activo')
+  let resumenPlanes: string | null = null
+  if (planes && planes.length) {
+    const hace12h = new Date(Date.now() - 12 * 3600 * 1000).toISOString()
+    const { data: evals } = await supabase
+      .schema('clinico')
+      .from('plan_evaluacion')
+      .select('plan_id, puntuacion, intervenciones_hechas, registrado_en')
+      .in('plan_id', planes.map((x) => x.id))
+      .gte('registrado_en', hace12h)
+      .order('registrado_en')
+    resumenPlanes = planes
+      .map((pl) => {
+        const ult = (evals ?? []).filter((e) => e.plan_id === pl.id).pop()
+        return ult
+          ? `${pl.etiqueta}: resultado ${ult.puntuacion}/5 (meta ${pl.meta}); ${(ult.intervenciones_hechas as string[]).join(', ') || 'sin intervenciones marcadas'}`
+          : `${pl.etiqueta}: sin evaluación en este turno (meta ${pl.meta})`
+      })
+      .join('\n')
+  }
+
   const { data: nota, error } = await supabase
     .schema('clinico')
     .from('documento_clinico')
-    .insert({ encuentro_id: encuentroId, tipo: 'registro_enfermeria', autor_id: usuarioId, contenido })
+    .insert({ encuentro_id: encuentroId, tipo: 'registro_enfermeria', autor_id: usuarioId, contenido: { ...contenido, planes: resumenPlanes } })
     .select('id')
     .single()
   if (error) return { error: traducirError(error.message) }
@@ -270,4 +297,61 @@ export async function omitirDosis(dispensacionId: string, encuentroId: string, _
   refrescar(encuentroId)
   revalidatePath('/farmacia')
   return { ok: 'Dosis registrada como no administrada.' }
+}
+
+// ---------------------------------------------------------------------
+// Planes de cuidados
+// ---------------------------------------------------------------------
+const lineas = (v: string | null) =>
+  (v ?? '')
+    .split('\n')
+    .map((l) => l.replace(/^[-•·\s]+/, '').trim())
+    .filter(Boolean)
+
+export async function crearPlanCuidado(encuentroId: string, _previo: Resultado, datos: FormData): Promise<Resultado> {
+  const { supabase } = await sesion()
+  const diagnostico = numero(datos, 'diagnostico')
+  if (!diagnostico) return { error: 'Elige el diagnóstico de enfermería.' }
+  const intervenciones = lineas(texto(datos, 'intervenciones'))
+  const { error } = await supabase.schema('clinico').rpc('crear_plan_cuidado', {
+    p_encuentro: encuentroId,
+    p_diagnostico: diagnostico,
+    p_relacionado_con: texto(datos, 'relacionado_con'),
+    p_manifestado_por: texto(datos, 'manifestado_por'),
+    p_resultado_esperado: texto(datos, 'resultado_esperado'),
+    p_puntuacion_inicial: numero(datos, 'puntuacion_inicial') ?? 2,
+    p_meta: numero(datos, 'meta') ?? 4,
+    p_intervenciones: intervenciones,
+    p_origen: texto(datos, 'origen'),
+  })
+  if (error) return { error: traducirError(error.message) }
+  refrescar(encuentroId)
+  return { ok: 'Plan de cuidados iniciado.' }
+}
+
+export async function evaluarPlanCuidado(planId: string, encuentroId: string, _previo: Resultado, datos: FormData): Promise<Resultado> {
+  const { supabase } = await sesion()
+  const puntuacion = numero(datos, 'puntuacion')
+  if (!puntuacion) return { error: 'Elige la puntuación del resultado (1 a 5).' }
+  const { error } = await supabase.schema('clinico').rpc('evaluar_plan_cuidado', {
+    p_plan: planId,
+    p_turno: texto(datos, 'turno'),
+    p_puntuacion: puntuacion,
+    p_intervenciones_hechas: datos.getAll('hechas').map(String),
+    p_nota: texto(datos, 'nota'),
+  })
+  if (error) return { error: traducirError(error.message) }
+  refrescar(encuentroId)
+  return { ok: 'Evaluación registrada.' }
+}
+
+export async function cerrarPlanCuidado(planId: string, encuentroId: string, _previo: Resultado, datos: FormData): Promise<Resultado> {
+  const { supabase } = await sesion()
+  const estado = texto(datos, 'estado') ?? 'resuelto'
+  const motivo = texto(datos, 'motivo')
+  if (!motivo) return { error: 'Indica el motivo del cierre.' }
+  const { error } = await supabase.schema('clinico').rpc('cerrar_plan_cuidado', { p_plan: planId, p_estado: estado, p_motivo: motivo })
+  if (error) return { error: traducirError(error.message) }
+  refrescar(encuentroId)
+  return { ok: estado === 'resuelto' ? 'Plan cerrado como resuelto.' : 'Plan suspendido.' }
 }

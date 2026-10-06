@@ -70,6 +70,10 @@ export async function registrarNotaMedica(encuentroId: string, _previo: Resultad
   const tipo = texto(datos, 'tipo') ?? ''
   const definicion = TIPOS_NOTA[tipo]
   if (!definicion) return { error: 'Elige el tipo de nota.' }
+  const pendiente = texto(datos, 'orden_pendiente')
+  if (pendiente) {
+    return { error: `Hay una orden capturada sin agregar (${pendiente}). Presiona "+ Agregar orden a la nota" o bórrala antes de firmar.` }
+  }
 
   const contenido: Record<string, string> = {}
   for (const c of [...definicion.campos.map((x) => x.clave), 'diagnostico', 'pronostico']) {

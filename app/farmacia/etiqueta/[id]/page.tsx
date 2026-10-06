@@ -18,7 +18,7 @@ export default async function EtiquetaPage({ params }: PageProps<'/farmacia/etiq
   const { data: d } = await supabase
     .schema('farmacia')
     .from('v_dosis')
-    .select('id, medicamento, concentracion, forma_farmaceutica, dosis, unidad_dosis, via, hora_programada, codigo_barras, estado, paciente, expediente, cama, lote, caducidad, alto_riesgo, grupo_controlado, prn, indicaciones')
+    .select('id, encuentro_id, medicamento, concentracion, forma_farmaceutica, dosis, unidad_dosis, via, hora_programada, codigo_barras, estado, paciente, expediente, cama, lote, caducidad, alto_riesgo, grupo_controlado, prn, indicaciones')
     .eq('id', id)
     .maybeSingle()
   if (!d) notFound()
@@ -29,9 +29,15 @@ export default async function EtiquetaPage({ params }: PageProps<'/farmacia/etiq
       <main className="flex-1 bg-slate-100 print:bg-white">
         <div className="max-w-3xl mx-auto px-4 py-4 space-y-4 print:p-0">
           <div className="flex items-center justify-between print:hidden">
-            <Link href="/farmacia?vista=enviar" className="text-sm text-sky-700 hover:underline">
-              ← Por enviar
-            </Link>
+            {perfil.rol === 'farmacia' ? (
+              <Link href="/farmacia?vista=enviar" className="text-sm text-sky-700 hover:underline">
+                ← Por enviar
+              </Link>
+            ) : (
+              <Link href={`/enfermeria/encuentro/${d.encuentro_id}`} className="text-sm text-sky-700 hover:underline">
+                ← Hoja de enfermería
+              </Link>
+            )}
             <BotonImprimir />
           </div>
           <div className="w-[70mm] min-h-[40mm] rounded-md border-2 border-slate-800 bg-white p-2 text-[10px] leading-tight text-slate-900 print:rounded-none">
@@ -57,7 +63,7 @@ export default async function EtiquetaPage({ params }: PageProps<'/farmacia/etiq
               </p>
             )}
             <div className="mt-1">
-              <CodigoBarras valor={d.codigo_barras as string} alto={30} ancho={1.1} />
+              <CodigoBarras valor={d.codigo_barras as string} alto={30} ancho={1.1} copiable />
             </div>
           </div>
           {d.estado === 'programada' && <p className="text-sm text-amber-800 print:hidden">La dosis aún no se prepara.</p>}

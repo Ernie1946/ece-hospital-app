@@ -20,7 +20,7 @@ const VISTAS = [
   ['ordenes', 'Órdenes'],
   ['preparar', 'Por preparar'],
   ['enviar', 'Por enviar'],
-  ['transito', 'En tubo y en piso'],
+  ['transito', 'Enviadas'],
   ['inventario', 'Inventario'],
   ['catalogo', 'Catálogo'],
 ] as const
@@ -46,6 +46,10 @@ type Dosis = {
   grupo_controlado: string | null
   prn: boolean
   envio_id: string | null
+  preparada_en: string | null
+  recibida_en: string | null
+  administrado_en: string | null
+  caducidad: string | null
 }
 type Orden = {
   id: string
@@ -67,7 +71,7 @@ type Orden = {
 }
 
 const COLUMNAS_DOSIS =
-  'id, orden_id, medicamento, concentracion, dosis, unidad_dosis, via, hora_programada, estado, codigo_barras, paciente, expediente, cama, estacion, lote, alto_riesgo, grupo_controlado, prn, envio_id'
+  'id, orden_id, medicamento, concentracion, dosis, unidad_dosis, via, hora_programada, estado, codigo_barras, paciente, expediente, cama, estacion, lote, alto_riesgo, grupo_controlado, prn, envio_id, preparada_en, recibida_en, administrado_en, caducidad'
 
 export default async function FarmaciaPage({ searchParams }: PageProps<'/farmacia'>) {
   const { perfil, email } = await obtenerPerfil()
@@ -88,7 +92,7 @@ export default async function FarmaciaPage({ searchParams }: PageProps<'/farmaci
     f().from('v_ordenes_vigentes').select('id', { count: 'exact', head: true }),
     f().from('v_dosis').select('id', { count: 'exact', head: true }).eq('estado', 'programada').lt('hora_programada', en24h),
     f().from('v_dosis').select('id', { count: 'exact', head: true }).eq('estado', 'preparada'),
-    f().from('v_dosis').select('id', { count: 'exact', head: true }).in('estado', ['enviada', 'recibida']),
+    f().from('v_dosis').select('id', { count: 'exact', head: true }).eq('estado', 'enviada'),
   ])
   const conteo: Partial<Record<Vista, number>> = {
     ordenes: cOrd.count ?? 0,
@@ -116,6 +120,8 @@ export default async function FarmaciaPage({ searchParams }: PageProps<'/farmaci
               </Link>
             ))}
           </nav>
+          {typeof sp.preparada === 'string' && <AvisoPreparada id={sp.preparada} porEnviar={conteo.enviar ?? 0} />}
+          {typeof sp.envio === 'string' && <AvisoEnvio id={sp.envio} />}
           {!esFarmacia && vista !== 'catalogo' && vista !== 'inventario' && (
             <p className="text-sm text-slate-600">Vista de consulta: la operación de farmacia la realiza el personal de farmacia.</p>
           )}
@@ -133,6 +139,45 @@ export default async function FarmaciaPage({ searchParams }: PageProps<'/farmaci
 }
 
 // ---------------------------------------------------------------------
+// Confirmaciones que quedan a la vista después de preparar o enviar
+async function AvisoPreparada({ id, porEnviar }: { id: string; porEnviar: number }) {
+  const supabase = await crearClienteServidor()
+  const { data } = await supabase.schema('farmacia').from('v_dosis').select(COLUMNAS_DOSIS).eq('id', id).maybeSingle()
+  const d = data as Dosis | null
+  if (!d || !d.preparada_en) return null
+  return (
+    <div role="status" className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+      <span>
+        ✓ Preparada a las <strong>{horaCorta(d.preparada_en)}</strong>: {d.medicamento} {cantidad(d.dosis)} {d.unidad_dosis} {d.via} para {d.paciente} ({d.cama ?? 'sin cama'}) ·
+        lote {d.lote}
+      </span>
+      <Link href={`/farmacia/etiqueta/${d.id}`} className="font-medium underline">
+        Imprimir etiqueta
+      </Link>
+      <Link href="/farmacia?vista=enviar" className="font-medium underline">
+        Siguiente paso: enviar por tubo ({porEnviar})
+      </Link>
+    </div>
+  )
+}
+
+async function AvisoEnvio({ id }: { id: string }) {
+  const supabase = await crearClienteServidor()
+  const [env, dosis] = await Promise.all([
+    supabase.schema('farmacia').from('envio_tubo').select('enviado_en, estacion_destino_id').eq('id', id).maybeSingle(),
+    supabase.schema('farmacia').from('v_dosis').select('id', { count: 'exact', head: true }).eq('envio_id', id),
+  ])
+  const e = env.data as { enviado_en: string; estacion_destino_id: number } | null
+  if (!e) return null
+  const { data: est } = await supabase.schema('catalogo').from('estacion_tubo').select('clave, ubicacion').eq('id', e.estacion_destino_id).maybeSingle()
+  return (
+    <p role="status" className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-900">
+      ✓ Enviado por tubo a las <strong>{horaCorta(e.enviado_en)}</strong> a <strong>{est?.clave}</strong> ({est?.ubicacion}) · {dosis.count ?? 0} dosis.
+      Enfermería debe recibir el envío en la hoja del paciente.
+    </p>
+  )
+}
+
 async function Ordenes({ esFarmacia }: { esFarmacia: boolean }) {
   const supabase = await crearClienteServidor()
   const { data } = await supabase
@@ -272,7 +317,8 @@ async function PorEnviar({ esFarmacia }: { esFarmacia: boolean }) {
               <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 py-1">
                 <span className="flex flex-wrap items-center gap-1">
                   <span className="font-semibold text-sky-800">{horaCorta(d.hora_programada)}</span>
-                  <strong>{d.medicamento}</strong> {cantidad(d.dosis)} {d.unidad_dosis} {d.via} · {d.cama ?? 'sin cama'} · {d.paciente} · lote {d.lote}
+                  <strong>{d.medicamento}</strong> {cantidad(d.dosis)} {d.unidad_dosis} {d.via} · {d.cama ?? 'sin cama'} · {d.paciente} · lote {d.lote} ·{' '}
+                  <span className="text-xs text-slate-500">preparada {horaCorta(d.preparada_en)}</span>
                   <Avisos d={d} />
                 </span>
                 <span className="flex items-center gap-3">
@@ -304,31 +350,57 @@ function Devolver({ id }: { id: string }) {
   )
 }
 
+// Lo enviado en las últimas 24 h, con su recorrido: preparada → enviada → recibida → administrada
 async function EnTransito({ esFarmacia }: { esFarmacia: boolean }) {
   const supabase = await crearClienteServidor()
+  const hace24h = new Date(ahora() - 24 * 3600 * 1000).toISOString()
   const { data } = await supabase
     .schema('farmacia')
     .from('v_dosis')
     .select(COLUMNAS_DOSIS)
-    .in('estado', ['enviada', 'recibida', 'omitida'])
-    .order('hora_programada')
+    .in('estado', ['enviada', 'recibida', 'omitida', 'administrada'])
+    .gte('hora_programada', hace24h)
+    .not('envio_id', 'is', null)
+    .order('hora_programada', { ascending: false })
     .limit(300)
   const dosis = (data ?? []) as Dosis[]
+  const idsEnvio = [...new Set(dosis.map((d) => d.envio_id as string))]
+  const { data: envios } = idsEnvio.length
+    ? await supabase.schema('farmacia').from('envio_tubo').select('id, enviado_en').in('id', idsEnvio)
+    : { data: [] }
+  const enviadoEn = new Map(((envios ?? []) as { id: string; enviado_en: string }[]).map((e) => [e.id, e.enviado_en]))
+  const paso = (t: string, h: string | null | undefined, hecho: boolean) => (
+    <span className={hecho ? 'text-slate-700' : 'text-slate-400'}>
+      {hecho ? '✓' : '○'} {t} {h ? horaCorta(h) : ''}
+    </span>
+  )
   return (
     <section className={claseTarjeta}>
-      <p className="mb-2 text-sm text-slate-600">Dosis enviadas, recibidas en piso u omitidas por enfermería (las omitidas se devuelven al inventario).</p>
+      <p className="mb-2 text-sm text-slate-600">
+        Dosis enviadas en las últimas 24 h y su recorrido. Las omitidas por enfermería se devuelven al inventario.
+      </p>
       {dosis.length === 0 ? (
-        <p className="text-sm text-slate-500">Nada en tránsito.</p>
+        <p className="text-sm text-slate-500">No hay envíos recientes.</p>
       ) : (
         <ul className="divide-y divide-slate-100 text-sm">
           {dosis.map((d) => (
-            <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 py-1">
-              <span className="flex flex-wrap items-center gap-1">
-                <span className={`rounded px-1 text-xs ${ESTADO_DOSIS[d.estado]?.color}`}>{ESTADO_DOSIS[d.estado]?.texto}</span>
-                <span className="font-semibold text-sky-800">{horaCorta(d.hora_programada)}</span>
-                <strong>{d.medicamento}</strong> {cantidad(d.dosis)} {d.unidad_dosis} · {d.estacion} · {d.cama} · {d.paciente}
-              </span>
-              {esFarmacia && d.estado === 'omitida' && <Devolver id={d.id} />}
+            <li key={d.id} className="py-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="flex flex-wrap items-center gap-1">
+                  <span className={`rounded px-1 text-xs ${ESTADO_DOSIS[d.estado]?.color}`}>{ESTADO_DOSIS[d.estado]?.texto}</span>
+                  <strong>{d.medicamento}</strong> {cantidad(d.dosis)} {d.unidad_dosis} {d.via} · {d.cama} · {d.paciente}
+                  <span className="text-xs text-slate-500">· dosis de las {horaCorta(d.hora_programada)}</span>
+                </span>
+                {esFarmacia && d.estado === 'omitida' && <Devolver id={d.id} />}
+              </div>
+              <p className="mt-0.5 flex flex-wrap gap-x-3 text-xs">
+                {paso('Preparada', d.preparada_en, true)}
+                {paso(`Enviada a ${d.estacion ?? '—'}`, enviadoEn.get(d.envio_id as string), true)}
+                {paso('Recibida en piso', d.recibida_en, !!d.recibida_en)}
+                {d.estado === 'omitida'
+                  ? <span className="text-red-700">✗ No administrada</span>
+                  : paso('Administrada', d.administrado_en, d.estado === 'administrada')}
+              </p>
             </li>
           ))}
         </ul>

@@ -38,6 +38,7 @@ export function FormNotaMedica({
   const [tipo, setTipo] = useState(tipoInicial)
   const [diagnosticos, setDiagnosticos] = useState<DxElegido[]>([])
   const [ordenes, setOrdenes] = useState<OrdenNueva[]>([])
+  const [pendiente, setPendiente] = useState('') // orden escrita pero aún no agregada
   const [version, setVersion] = useState(0) // para vaciar los campos de texto al guardar
 
   const definicion = TIPOS_NOTA[tipo]
@@ -193,7 +194,14 @@ export function FormNotaMedica({
             )
           )}
         />
-        <NuevaOrden buscarMedicamentos={buscarMedicamentos} alAgregar={(o) => setOrdenes((os) => [...os, o])} />
+        <input type="hidden" name="orden_pendiente" value={pendiente} />
+        <NuevaOrden
+          key={`orden-${version}`}
+          buscarMedicamentos={buscarMedicamentos}
+          alAgregar={(o) => setOrdenes((os) => [...os, o])}
+          alCambiar={setPendiente}
+          agregadas={ordenes.length}
+        />
       </fieldset>
 
       <p className="text-xs text-slate-500">
@@ -285,12 +293,31 @@ function BuscadorCie10({
 // ---------------------------------------------------------------------
 // Captura de una orden
 // ---------------------------------------------------------------------
+// "1 g", "1g.", "500 mg", "0,5" → número en la unidad del catálogo (null si no se entiende)
+const FACTOR: Record<string, number> = { g: 1000, mg: 1, mcg: 0.001, µg: 0.001, ug: 0.001 }
+export function leerDosis(texto: string, unidadCatalogo: string): number | null {
+  const m = texto.trim().toLowerCase().replace(',', '.').match(/^(\d+(?:\.\d+)?)\s*([a-zµ]*)\.?$/)
+  if (!m) return null
+  const n = Number(m[1])
+  if (!Number.isFinite(n) || n <= 0) return null
+  const u = m[2]
+  const cat = unidadCatalogo.toLowerCase()
+  if (!u || u === cat) return n
+  if (FACTOR[u] && FACTOR[cat]) return Math.round(((n * FACTOR[u]) / FACTOR[cat]) * 1000) / 1000
+  if (cat === 'ui' && (u === 'u' || u === 'ui')) return n
+  return null
+}
+
 function NuevaOrden({
   buscarMedicamentos,
   alAgregar,
+  alCambiar,
+  agregadas,
 }: {
   buscarMedicamentos: (q: string) => Promise<Medicamento[]>
   alAgregar: (o: OrdenNueva) => void
+  alCambiar: (pendiente: string) => void
+  agregadas: number
 }) {
   const [tipo, setTipo] = useState<OrdenNueva['tipo']>('medicamento')
   const [prioridad, setPrioridad] = useState('rutina')
@@ -305,6 +332,17 @@ function NuevaOrden({
   const [duracion, setDuracion] = useState('')
   const [indicaciones, setIndicaciones] = useState('')
   const [aviso, setAviso] = useState<string | null>(null)
+
+  // Avisa al formulario si hay una orden escrita que todavía no se agrega
+  const resumenPendiente =
+    tipo === 'medicamento'
+      ? med
+        ? `${med.denominacion_generica}${dosis ? ` ${dosis} ${med.unidad_dosis}` : ''}`
+        : ''
+      : descripcion.trim()
+  useEffect(() => {
+    alCambiar(resumenPendiente)
+  }, [resumenPendiente, alCambiar])
 
   useEffect(() => {
     const q = consulta.trim()
@@ -336,9 +374,9 @@ function NuevaOrden({
 
   function agregar() {
     if (tipo === 'medicamento') {
-      const d = Number(dosis.replace(',', '.'))
       if (!med) return setAviso('Elige el medicamento del catálogo.')
-      if (!Number.isFinite(d) || d <= 0) return setAviso('Escribe la dosis.')
+      const d = leerDosis(dosis, med.unidad_dosis)
+      if (d === null) return setAviso(`Escribe la dosis en ${med.unidad_dosis} (solo el número, p. ej. ${med.unidad_dosis === 'mg' ? '1000' : '1'}).`)
       const horas = frecuencia === '' ? null : Number(frecuencia)
       const dias = duracion ? Number(duracion) : null
       if (horas === null && !prn && dias) return setAviso('Una dosis única no lleva duración en días.')
@@ -363,7 +401,17 @@ function NuevaOrden({
   }
 
   return (
-    <div className="space-y-2 rounded-lg bg-slate-50 p-3">
+    <div
+      className="space-y-2 rounded-lg bg-slate-50 p-3"
+      onKeyDown={(e) => {
+        // Enter dentro de la orden la agrega; nunca firma la nota por accidente
+        if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT') {
+          e.preventDefault()
+          if (resumenPendiente) agregar()
+        }
+      }}
+    >
+      {agregadas > 0 && <p className="text-xs text-slate-600">Puedes agregar otra orden: elige el siguiente medicamento o indicación.</p>}
       <div className="flex flex-wrap items-end gap-2">
         <label className={claseEtiqueta}>
           Nueva orden
@@ -397,7 +445,7 @@ function NuevaOrden({
       {tipo === 'medicamento' ? (
         <>
           {med ? (
-            <p className="text-sm">
+            <p className="text-sm text-slate-900">
               <strong>
                 {med.denominacion_generica} {med.concentracion}
               </strong>{' '}
@@ -449,7 +497,12 @@ function NuevaOrden({
           <div className="flex flex-wrap items-end gap-2">
             <label className={claseEtiqueta}>
               Dosis {med && <span className="font-normal text-slate-400">({med.unidad_dosis})</span>}
-              <input value={dosis} onChange={(e) => setDosis(e.target.value)} inputMode="decimal" className={`${claseCampo} w-24`} />
+              <input value={dosis} onChange={(e) => setDosis(e.target.value)} inputMode="decimal" className={`${claseCampo} w-28`} />
+              {med && dosis.trim() !== '' && leerDosis(dosis, med.unidad_dosis) !== null && Number(dosis.replace(',', '.')) !== leerDosis(dosis, med.unidad_dosis) && (
+                <span className="mt-0.5 block text-xs font-normal text-sky-800">
+                  = {leerDosis(dosis, med.unidad_dosis)!.toLocaleString('es-MX')} {med.unidad_dosis}
+                </span>
+              )}
             </label>
             <label className={claseEtiqueta}>
               Vía
@@ -488,12 +541,6 @@ function NuevaOrden({
           <input
             value={descripcion}
             onChange={(e) => setDescripcion(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault()
-                agregar()
-              }
-            }}
             placeholder={
               tipo === 'dieta'
                 ? 'Ayuno, dieta blanda, para diabético 1800 kcal…'
@@ -508,7 +555,11 @@ function NuevaOrden({
         </label>
       )}
       {aviso && <p className="text-xs text-red-700">{aviso}</p>}
-      <button type="button" onClick={agregar} className="text-sm font-medium text-sky-700 hover:underline">
+      <button
+        type="button"
+        onClick={agregar}
+        className="rounded-lg border border-sky-700 bg-white px-3 py-1.5 text-sm font-medium text-sky-800 hover:bg-sky-50"
+      >
         + Agregar orden a la nota
       </button>
     </div>

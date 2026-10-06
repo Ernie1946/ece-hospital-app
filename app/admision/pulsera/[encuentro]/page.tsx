@@ -74,7 +74,7 @@ export default async function PulseraPage({ params }: PageProps<'/admision/pulse
                     </p>
                   )}
                 </div>
-                <CodigoBarras valor={pulsera.codigo_barras} />
+                <CodigoBarras valor={pulsera.codigo_barras} copiable />
               </div>
 
               <p className="text-xs text-slate-500 print:hidden">

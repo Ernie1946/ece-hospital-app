@@ -81,6 +81,7 @@ type DosisPiso = {
   prn: boolean
   motivo: string | null
   administrado_en: string | null
+  codigo_barras: string | null
 }
 type Nota = {
   id: string
@@ -151,7 +152,7 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
     supabase
       .schema('farmacia')
       .from('v_dosis')
-      .select('id, orden_id, medicamento, concentracion, dosis, unidad_dosis, via, hora_programada, estado, envio_id, alto_riesgo, grupo_controlado, prn, motivo, administrado_en')
+      .select('id, orden_id, medicamento, concentracion, dosis, unidad_dosis, via, hora_programada, estado, envio_id, alto_riesgo, grupo_controlado, prn, motivo, administrado_en, codigo_barras')
       .eq('encuentro_id', id)
       .gte('hora_programada', hace24h)
       .neq('estado', 'cancelada')
@@ -162,6 +163,12 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
     supabase.schema('seguridad').from('usuario').select('id, nombre, primer_apellido').eq('rol', 'enfermeria').eq('activo', true).neq('id', perfil.id).order('primer_apellido'),
   ])
   const listaDosis = (dosisQ.data ?? []) as DosisPiso[]
+  // Modo de prueba (ECE_MODO_PRUEBA=1 en .env.local): muestra los códigos para usarlos sin lector
+  const modoPrueba = process.env.ECE_MODO_PRUEBA === '1'
+  const { data: pul } = modoPrueba
+    ? await supabase.schema('clinico').from('pulsera').select('codigo_barras').eq('encuentro_id', id).eq('activa', true).maybeSingle()
+    : { data: null }
+  const pulseraActiva = (pul?.codigo_barras as string | undefined) ?? null
   const idsPrn = new Set(((prnQ.data ?? []) as { orden_id: string }[]).map((x) => x.orden_id))
   const ordenesPrn = ordenesMed.filter((o) => idsPrn.has(o.id))
   const enviosPendientes = [...new Set(listaDosis.filter((d) => d.estado === 'enviada' && d.envio_id).map((d) => d.envio_id as string))]
@@ -211,9 +218,14 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
             <Link href="/enfermeria" className="text-sky-700 hover:underline">
               ← Tablero de enfermería
             </Link>
-            <Link href={`/medicos/encuentro/${id}`} className="text-sky-700 hover:underline">
-              Expediente médico →
-            </Link>
+            <span className="flex gap-4">
+              <a href={`/admision/pulsera/${id}`} target="_blank" rel="noopener" className="text-sky-700 hover:underline">
+                Pulsera del paciente ↗
+              </a>
+              <Link href={`/medicos/encuentro/${id}`} className="text-sky-700 hover:underline">
+                Expediente médico →
+              </Link>
+            </span>
           </div>
 
           {/* Identificación */}
@@ -233,8 +245,8 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
               <p className="text-sm text-slate-700">Dx: {encuentro.diagnostico_presuntivo as string}</p>
             )}
             <div className="mt-2 flex flex-wrap gap-2 text-xs">
-              {(alergias.data ?? []).map((a) => (
-                <span key={a.sustancia as string} className="rounded bg-red-100 px-2 py-0.5 font-medium text-red-800">
+              {(alergias.data ?? []).map((a, i) => (
+                <span key={`${a.sustancia}-${i}`} className="rounded bg-red-100 px-2 py-0.5 font-medium text-red-800">
                   Alergia: {a.sustancia as string}
                   {a.severidad ? ` (${a.severidad})` : ''}
                 </span>
@@ -346,7 +358,21 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
                 )}
                 {puedeRegistrar && listaDosis.length > 0 && (
                   <div className="mt-2">
-                    <AdministrarDosis accion={administrarDosis.bind(null, id)} verificadores={verificadores} />
+                    <AdministrarDosis
+                      accion={administrarDosis.bind(null, id)}
+                      verificadores={verificadores}
+                      encuentroId={id}
+                      ayuda={
+                        modoPrueba
+                          ? {
+                              pulsera: pulseraActiva,
+                              dosis: listaDosis
+                                .filter((d) => d.estado === 'recibida' && d.codigo_barras)
+                                .map((d) => ({ codigo: d.codigo_barras as string, texto: `${horaCorta(d.hora_programada)} ${d.medicamento} ${cantidad(d.dosis)} ${d.unidad_dosis}` })),
+                            }
+                          : null
+                      }
+                    />
                   </div>
                 )}
                 {ordenesPrn.length > 0 && (
@@ -377,6 +403,11 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
                             {d.administrado_en && <span className="text-xs text-emerald-800">· administrada {horaCorta(d.administrado_en)}</span>}
                             {d.motivo && d.estado === 'omitida' && <span className="text-xs text-red-700">· {d.motivo}</span>}
                           </span>
+                          {['enviada', 'recibida'].includes(d.estado) && (
+                            <a href={`/farmacia/etiqueta/${d.id}`} target="_blank" rel="noopener" className="text-xs text-sky-700 hover:underline">
+                              Etiqueta ↗
+                            </a>
+                          )}
                           {puedeRegistrar && ['enviada', 'recibida'].includes(d.estado) && (
                             <details>
                               <summary className="cursor-pointer text-xs text-red-700">No se administró</summary>

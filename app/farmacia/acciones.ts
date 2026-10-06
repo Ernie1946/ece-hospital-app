@@ -40,19 +40,19 @@ export async function programarPendientes(_previo: Resultado, datos: FormData): 
 
 export async function prepararDosis(dispensacionId: string): Promise<Resultado> {
   const supabase = await sesion()
-  const { data, error } = await supabase.schema('farmacia').rpc('preparar_fefo', { p_dispensacion: dispensacionId })
+  const { error } = await supabase.schema('farmacia').rpc('preparar_fefo', { p_dispensacion: dispensacionId })
   if (error) return { error: traducirError(error.message) }
   refrescar()
-  return { ok: `Preparada · etiqueta ${data}` }
+  redirect(`/farmacia?vista=preparar&preparada=${dispensacionId}`)
 }
 
 export async function enviarPorTubo(ids: string[]): Promise<Resultado> {
   const supabase = await sesion()
   if (ids.length === 0) return { error: 'No hay dosis por enviar.' }
-  const { error } = await supabase.schema('farmacia').rpc('enviar_por_tubo', { p_dispensaciones: ids })
+  const { data, error } = await supabase.schema('farmacia').rpc('enviar_por_tubo', { p_dispensaciones: ids })
   if (error) return { error: traducirError(error.message) }
   refrescar()
-  return { ok: `${ids.length} dosis enviada(s) por tubo.` }
+  redirect(`/farmacia?vista=transito&envio=${data}`)
 }
 
 export async function devolverDosis(dispensacionId: string, _previo: Resultado, datos: FormData): Promise<Resultado> {

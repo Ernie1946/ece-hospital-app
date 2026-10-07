@@ -3,6 +3,7 @@ import { crearClienteServidor } from '@/lib/supabase/server'
 import { obtenerPerfil } from '@/lib/perfil'
 import { Encabezado } from '@/components/Encabezado'
 import { SinAlta } from '@/components/SinAlta'
+import { TIPO_LUGAR, conSubareas, ordenarAreas, type Area } from '@/lib/areas'
 
 // ---------------------------------------------------------------------
 // Censo de camas — pantalla principal
@@ -29,6 +30,11 @@ type Cama = {
   aislamiento: string | null
   dias_estancia: number | null
   alergias: string | null
+  area: string
+  area_nombre: string
+  area_padre: string | null
+  tipo_lugar: string
+  servicio_cama: string | null
 }
 
 type Ocupacion = {
@@ -60,35 +66,39 @@ const AISLAMIENTO: Record<string, string> = {
 }
 
 export default async function CensoPage({ searchParams }: PageProps<'/'>) {
-  const { servicio: filtro } = await searchParams
-  const servicioElegido = typeof filtro === 'string' ? filtro : null
+  const { area: filtro } = await searchParams
+  const areaElegida = typeof filtro === 'string' ? filtro : null
 
   const { perfil, email } = await obtenerPerfil()
   if (!perfil) return <SinAlta email={email} />
 
   const supabase = await crearClienteServidor()
 
-  const [{ data: camasData, error }, { data: ocupacionData }] = await Promise.all([
+  const [{ data: camasData, error }, { data: ocupacionData }, { data: areasData }] = await Promise.all([
     supabase.schema('camas').from('v_censo').select('*'),
     supabase.schema('camas').from('v_ocupacion').select('*'),
+    supabase.schema('catalogo').from('area').select('id, clave, nombre, tipo, censable, padre_id, orden').eq('activo', true),
   ])
 
-  const camas = ((camasData ?? []) as Cama[]).sort(
-    (a, b) => a.piso - b.piso || a.cama.localeCompare(b.cama, 'es', { numeric: true })
-  )
+  const camas = ((camasData ?? []) as Cama[]).sort((a, b) => a.cama.localeCompare(b.cama, 'es', { numeric: true }))
   const ocupacion = (ocupacionData ?? []) as Ocupacion[]
   const total = ocupacion.find((o) => o.servicio === 'TOTAL CENSABLES')
+  const areas = ordenarAreas((areasData ?? []) as Area[])
+  const conCamas = new Set(camas.map((c) => c.area))
+  const principales = areas.filter((a) => !a.padre_id && (conCamas.has(a.clave) || areas.some((h) => h.padre_id === a.id && conCamas.has(h.clave))))
+  const elegida = areas.find((a) => a.clave === areaElegida)
+  const visiblesAreas = new Set(elegida ? conSubareas(areas, elegida.id) : areas.map((a) => a.clave))
+  const nombreDe = new Map(areas.map((a) => [a.id, a.nombre]))
 
-  // Servicios en el orden en que aparecen, con su nombre
-  const servicios = Array.from(new Map(camas.map((c) => [c.servicio, c.servicio_nombre])).entries())
-  const visibles = servicioElegido ? camas.filter((c) => c.servicio === servicioElegido) : camas
-  const porServicio = servicios
-    .filter(([clave]) => !servicioElegido || clave === servicioElegido)
-    .map(([clave, nombre]) => ({
-      clave,
-      nombre,
-      camas: visibles.filter((c) => c.servicio === clave),
-      resumen: ocupacion.find((o) => o.servicio === clave),
+  // Camas agrupadas por área (con el nombre de su área principal)
+  const porArea = areas
+    .filter((a) => conCamas.has(a.clave) && visiblesAreas.has(a.clave))
+    .map((a) => ({
+      clave: a.clave,
+      nombre: a.padre_id ? `${nombreDe.get(a.padre_id)} · ${a.nombre}` : a.nombre,
+      censable: a.censable,
+      camas: camas.filter((c) => c.area === a.clave),
+      resumen: ocupacion.find((o) => o.servicio === a.clave),
     }))
 
   return (
@@ -120,12 +130,12 @@ export default async function CensoPage({ searchParams }: PageProps<'/'>) {
           </section>
         )}
 
-        {/* Filtro por servicio */}
-        <nav className="flex flex-wrap gap-2 text-sm" aria-label="Filtrar por servicio">
-          <Filtro href="/" activo={!servicioElegido}>Todos</Filtro>
-          {servicios.map(([clave, nombre]) => (
-            <Filtro key={clave} href={`/?servicio=${clave}`} activo={servicioElegido === clave}>
-              {nombre}
+        {/* Filtro por área */}
+        <nav className="flex flex-wrap gap-2 text-sm" aria-label="Filtrar por área">
+          <Filtro href="/" activo={!areaElegida}>Todas</Filtro>
+          {principales.map((a) => (
+            <Filtro key={a.clave} href={`/?area=${a.clave}`} activo={areaElegida === a.clave}>
+              {a.nombre}
             </Filtro>
           ))}
         </nav>
@@ -139,8 +149,8 @@ export default async function CensoPage({ searchParams }: PageProps<'/'>) {
           ))}
         </div>
 
-        {/* Camas por servicio */}
-        {porServicio.map((s) => (
+        {/* Camas por área */}
+        {porArea.map((s) => (
           <section key={s.clave} className="space-y-2">
             <h2 className="text-sm font-semibold text-slate-800">
               {s.nombre}
@@ -149,7 +159,11 @@ export default async function CensoPage({ searchParams }: PageProps<'/'>) {
                   {s.resumen.ocupadas + s.resumen.reservadas}/{s.resumen.camas} · {s.resumen.pct_ocupacion ?? 0}%
                 </span>
               )}
-              {!s.resumen && <span className="ml-2 font-normal text-slate-500">no censable</span>}
+              {!s.censable && (
+                <span className="ml-2 font-normal text-slate-500">
+                  {s.camas.filter((c) => c.estado === 'ocupada' || c.estado === 'reservada').length}/{s.camas.length} · no censable
+                </span>
+              )}
             </h2>
             <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8 gap-2">
               {s.camas.map((c) => (
@@ -169,9 +183,12 @@ function TarjetaCama({ cama }: { cama: Cama }) {
   return (
     <article className={`rounded-lg border p-2 text-xs ${estilo.tarjeta}`}>
       <div className="flex items-center justify-between">
-        <span className="font-semibold text-slate-900">{cama.cama}</span>
-        <span className="flex items-center gap-1 text-slate-600">
-          <span className={`inline-block h-2 w-2 rounded-full ${estilo.punto}`} />
+        <span className="whitespace-nowrap font-semibold text-slate-900">
+          {cama.tipo_lugar !== 'cama' && <span title={TIPO_LUGAR[cama.tipo_lugar]?.nombre}>{TIPO_LUGAR[cama.tipo_lugar]?.icono} </span>}
+          {cama.cama}
+        </span>
+        <span className="flex items-center gap-1 truncate text-slate-600">
+          <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${estilo.punto}`} />
           {estilo.etiqueta}
         </span>
       </div>
@@ -182,6 +199,7 @@ function TarjetaCama({ cama }: { cama: Cama }) {
           <p className="text-slate-600">
             {cama.sexo} · {cama.edad ?? '—'} a · {cama.dias_estancia ?? 0} d
           </p>
+          {cama.servicio && cama.servicio !== cama.servicio_cama && <p className="text-sky-800">{cama.servicio_nombre}</p>}
           {cama.medico_tratante && <p className="text-slate-600 truncate">Dr(a). {cama.medico_tratante}</p>}
           {cama.alergias && (
             <p className="rounded bg-red-100 px-1 text-red-800 font-medium">Alergia: {cama.alergias}</p>

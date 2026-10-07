@@ -58,7 +58,7 @@ export default async function FichaPacientePage({ params, searchParams }: PagePr
     supabase.schema('seguridad').from('usuario').select('id, nombre, primer_apellido, especialidad').eq('rol', 'medico_tratante').eq('activo', true).order('primer_apellido'),
     supabase.schema('catalogo').from('aseguradora').select('id, nombre').eq('activo', true).order('nombre'),
     supabase.schema('catalogo').from('medicamento').select('id, denominacion_generica').eq('activo', true).order('denominacion_generica'),
-    supabase.schema('camas').from('cama').select('id, clave, servicio_id, estado').eq('activa', true),
+    supabase.schema('camas').from('cama').select('id, clave, servicio_id, area_id, tipo_lugar, estado').eq('activa', true),
   ])
 
   const encuentros = (encuentrosRes.data ?? []) as Encuentro[]
@@ -68,6 +68,15 @@ export default async function FichaPacientePage({ params, searchParams }: PagePr
     : { data: [] }
 
   const servicioPorId = new Map((servicios.data ?? []).map((s) => [s.id as number, s]))
+  const { data: areasData } = await supabase.schema('catalogo').from('area').select('id, clave, nombre, padre_id, orden').eq('activo', true)
+  const areasLista = (areasData ?? []) as { id: number; clave: string; nombre: string; padre_id: number | null; orden: number }[]
+  const areaPorId = new Map(areasLista.map((a) => [a.id, a]))
+  const nombreArea = (id: number) => {
+    const a = areaPorId.get(id)
+    if (!a) return 'Otras'
+    const padre = a.padre_id ? areaPorId.get(a.padre_id) : undefined
+    return padre ? `${padre.nombre} · ${a.nombre}` : a.nombre
+  }
   const camaPorId = new Map((camas.data ?? []).map((c) => [c.id as number, c]))
   const medicoPorId = new Map((medicos.data ?? []).map((m) => [m.id as string, m]))
   const aseguradoraPorId = new Map((aseguradoras.data ?? []).map((a) => [a.id as number, a.nombre as string]))
@@ -301,9 +310,13 @@ export default async function FichaPacientePage({ params, searchParams }: PagePr
                 const cama = asignacion ? camaPorId.get(asignacion.cama_id as number) : undefined
                 const pulsera = e.pulsera.find((p) => p.activa)
                 const vigente = ['programado', 'activo'].includes(e.estado)
+                // Camas libres del servicio del paciente o de áreas sin servicio fijo, agrupadas por área
                 const disponibles = (camas.data ?? [])
-                  .filter((c) => c.servicio_id === e.servicio_id && c.estado === 'disponible')
+                  .filter((c) => (c.servicio_id === null || c.servicio_id === e.servicio_id) && c.estado === 'disponible' && areaPorId.has(c.area_id as number))
                   .sort((a, b) => (a.clave as string).localeCompare(b.clave as string, 'es', { numeric: true }))
+                const gruposCamas = [...new Set(disponibles.map((c) => c.area_id as number))]
+                  .sort((a, b) => (areaPorId.get(a)?.orden ?? 0) - (areaPorId.get(b)?.orden ?? 0))
+                  .map((areaId) => ({ areaId, camas: disponibles.filter((c) => c.area_id === areaId) }))
                 const medico = medicoPorId.get(e.medico_tratante_id)
 
                 return (
@@ -333,13 +346,20 @@ export default async function FichaPacientePage({ params, searchParams }: PagePr
                         {!asignacion && e.tipo !== 'cirugia' && (
                           <FormAccion accion={asignarCama.bind(null, id, e.id)} boton="Reservar cama" className="flex flex-wrap items-end gap-2">
                             <label className={claseEtiqueta}>
-                              Cama disponible en {servicio?.nombre as string}
+                              Cama disponible para {servicio?.nombre as string}
                               <select name="cama" required defaultValue="" className={`${claseCampo} min-w-40`}>
                                 <option value="" disabled>
                                   {disponibles.length ? `${disponibles.length} disponibles…` : 'No hay camas disponibles'}
                                 </option>
-                                {disponibles.map((c) => (
-                                  <option key={c.id as number} value={c.clave as string}>{c.clave as string}</option>
+                                {gruposCamas.map((g) => (
+                                  <optgroup key={g.areaId} label={`${nombreArea(g.areaId)} (${g.camas.length})`}>
+                                    {g.camas.map((c) => (
+                                      <option key={c.id as number} value={c.clave as string}>
+                                        {c.clave as string}
+                                        {c.tipo_lugar !== 'cama' ? ` (${c.tipo_lugar})` : ''}
+                                      </option>
+                                    ))}
+                                  </optgroup>
                                 ))}
                               </select>
                             </label>

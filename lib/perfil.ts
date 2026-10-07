@@ -8,6 +8,7 @@ export type Perfil = {
   primer_apellido: string
   rol: string
   servicio_id: number | null
+  area_id: number | null
 }
 
 // Usuario de la sesión + su perfil clínico (seguridad.usuario).
@@ -20,7 +21,7 @@ export const obtenerPerfil = cache(async (): Promise<{ perfil: Perfil | null; em
   const { data } = await supabase
     .schema('seguridad')
     .from('usuario')
-    .select('nombre, primer_apellido, rol, servicio_id')
+    .select('nombre, primer_apellido, rol, servicio_id, area_id')
     .eq('id', auth.user.id)
     .maybeSingle()
 

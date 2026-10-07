@@ -8,9 +8,10 @@ import { claseTarjeta } from '@/lib/estilos'
 import { ahora, fechaHora } from '@/lib/formato'
 import { alertasSignos, HORAS_SIN_SIGNOS, type Signos } from '@/lib/clinica'
 import { cambiarEstadoCama, registrarLlegada } from './acciones'
+import { TIPO_LUGAR, conSubareas, ordenarAreas, type Area } from '@/lib/areas'
 
 // ---------------------------------------------------------------------
-// Tablero de enfermería por servicio: llegadas pendientes, pacientes en
+// Tablero de enfermería por área: llegadas pendientes, pacientes en
 // piso con sus últimos signos, y camas por limpiar.
 // ---------------------------------------------------------------------
 
@@ -27,6 +28,9 @@ type CamaCenso = {
   alergias: string | null
   aislamiento: string | null
   medico_tratante: string | null
+  servicio_nombre: string | null
+  area_nombre: string
+  tipo_lugar: string
 }
 
 type SignosFila = Signos & { encuentro_id: string; tomado_en: string }
@@ -38,25 +42,31 @@ export default async function EnfermeriaPage({ searchParams }: PageProps<'/enfer
   if (!perfil) return <SinAlta email={email} />
 
   const supabase = await crearClienteServidor()
-  const { data: servicios } = await supabase
-    .schema('catalogo')
-    .from('servicio')
-    .select('id, clave, nombre')
-    .eq('activo', true)
-    .order('id')
+  const [{ data: areasData }, { data: camasArea }, { data: servicioUsuario }] = await Promise.all([
+    supabase.schema('catalogo').from('area').select('id, clave, nombre, tipo, censable, padre_id, orden').eq('activo', true),
+    supabase.schema('camas').from('cama').select('area_id').eq('activa', true),
+    perfil.servicio_id
+      ? supabase.schema('catalogo').from('servicio').select('clave').eq('id', perfil.servicio_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ])
+  const todas = ordenarAreas((areasData ?? []) as Area[])
+  const conCamas = new Set(((camasArea ?? []) as { area_id: number }[]).map((c) => c.area_id))
+  const areas = todas.filter((a) => conCamas.has(a.id) || todas.some((h) => h.padre_id === a.id && conCamas.has(h.id)))
 
-  // Servicio elegido: el de la URL, o el de la enfermera, o el primero
-  const { servicio: elegido } = await searchParams
+  // Área elegida: la de la URL, o el área base de la enfermera, o la de su servicio, o la primera
+  const { area: elegido } = await searchParams
   const servicio =
-    servicios?.find((s) => s.clave === elegido) ??
-    servicios?.find((s) => s.id === perfil.servicio_id) ??
-    servicios?.[0]
+    areas.find((a) => a.clave === elegido) ??
+    areas.find((a) => a.id === perfil.area_id) ??
+    areas.find((a) => a.clave === (servicioUsuario as { clave: string } | null)?.clave) ??
+    areas[0]
+  const clavesVisibles = servicio ? conSubareas(todas, servicio.id) : []
 
   const { data: censoData } = await supabase
     .schema('camas')
     .from('v_censo')
-    .select('cama, servicio, estado, estado_desde, encuentro_id, paciente, sexo, edad, dias_estancia, alergias, aislamiento, medico_tratante')
-    .eq('servicio', servicio?.clave ?? '')
+    .select('cama, servicio, servicio_nombre, area_nombre, tipo_lugar, estado, estado_desde, encuentro_id, paciente, sexo, edad, dias_estancia, alergias, aislamiento, medico_tratante')
+    .in('area', clavesVisibles)
 
   const camas = ((censoData ?? []) as CamaCenso[]).sort((a, b) => a.cama.localeCompare(b.cama, 'es', { numeric: true }))
   const llegadas = camas.filter((c) => c.estado === 'reservada' && c.encuentro_id)
@@ -101,12 +111,12 @@ export default async function EnfermeriaPage({ searchParams }: PageProps<'/enfer
             </p>
           )}
 
-          {/* Servicios */}
-          <nav className="flex flex-wrap gap-2 text-sm" aria-label="Servicio">
-            {(servicios ?? []).map((s) => (
+          {/* Áreas */}
+          <nav className="flex flex-wrap gap-2 text-sm" aria-label="Área">
+            {areas.map((s) => (
               <Link
-                key={s.id as number}
-                href={`/enfermeria?servicio=${s.clave}`}
+                key={s.id}
+                href={`/enfermeria?area=${s.clave}`}
                 aria-current={s.clave === servicio?.clave ? 'page' : undefined}
                 className={`rounded-full border px-3 py-1 ${
                   s.clave === servicio?.clave
@@ -114,7 +124,8 @@ export default async function EnfermeriaPage({ searchParams }: PageProps<'/enfer
                     : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
                 }`}
               >
-                {s.nombre as string}
+                {s.padre_id ? '· ' : ''}
+                {s.nombre}
               </Link>
             ))}
           </nav>
@@ -123,7 +134,7 @@ export default async function EnfermeriaPage({ searchParams }: PageProps<'/enfer
           <section className={claseTarjeta}>
             <h2 className="text-sm font-semibold text-slate-800 mb-2">Llegadas pendientes ({llegadas.length})</h2>
             {llegadas.length === 0 ? (
-              <p className="text-sm text-slate-500">Sin camas reservadas por Admisión en este servicio.</p>
+              <p className="text-sm text-slate-500">Sin camas reservadas por Admisión en esta área.</p>
             ) : (
               <ul className="divide-y divide-slate-100">
                 {llegadas.map((c) => (
@@ -149,7 +160,7 @@ export default async function EnfermeriaPage({ searchParams }: PageProps<'/enfer
           {/* Pacientes en piso */}
           <section className="space-y-2">
             <h2 className="text-sm font-semibold text-slate-800">Pacientes en piso ({enPiso.length})</h2>
-            {enPiso.length === 0 && <p className="text-sm text-slate-500">Sin pacientes hospitalizados en este servicio.</p>}
+            {enPiso.length === 0 && <p className="text-sm text-slate-500">Sin pacientes hospitalizados en esta área.</p>}
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {enPiso.map((c) => {
                 const s = ultimosSignos.get(c.encuentro_id!)
@@ -171,6 +182,8 @@ export default async function EnfermeriaPage({ searchParams }: PageProps<'/enfer
                     <p className="text-sm font-medium text-slate-900 leading-tight">{c.paciente}</p>
                     {c.medico_tratante && <p className="text-xs text-slate-500">Dr(a). {c.medico_tratante}</p>}
                     <div className="mt-1 flex flex-wrap gap-1 text-xs">
+                      {c.servicio_nombre && <span className="rounded bg-sky-50 px-1 text-sky-900">{c.servicio_nombre}</span>}
+                      {c.tipo_lugar !== 'cama' && <span className="rounded bg-slate-100 px-1">{TIPO_LUGAR[c.tipo_lugar]?.nombre}</span>}
                       {c.alergias && <span className="rounded bg-red-100 px-1 text-red-800 font-medium">Alergia: {c.alergias}</span>}
                       {c.aislamiento && c.aislamiento !== 'ninguno' && (
                         <span className="rounded bg-purple-100 px-1 text-purple-800">Aislamiento {AISLAMIENTO[c.aislamiento]}</span>

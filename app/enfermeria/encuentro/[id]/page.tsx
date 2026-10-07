@@ -122,7 +122,7 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
   const [paciente, alergias, cama, medico, acceso, signos, escalas, liquidos, notas, ordenes] = await Promise.all([
     supabase.schema('clinico').from('paciente').select('nombre, primer_apellido, segundo_apellido, expediente, fecha_nacimiento, sexo, tipo_sangre').eq('id', encuentro.paciente_id).single(),
     supabase.schema('clinico').from('paciente_alergia').select('sustancia, severidad').eq('paciente_id', encuentro.paciente_id).eq('activa', true),
-    supabase.schema('camas').from('v_censo').select('cama, servicio_nombre').eq('encuentro_id', id).maybeSingle(),
+    supabase.schema('camas').from('v_censo').select('cama, servicio_nombre, area_nombre').eq('encuentro_id', id).maybeSingle(),
     supabase.schema('seguridad').from('usuario').select('nombre, primer_apellido').eq('id', encuentro.medico_tratante_id).maybeSingle(),
     supabase.schema('clinico').rpc('puede_ver_encuentro', { p_encuentro: id }),
     supabase.schema('clinico').from('signos_vitales').select('*').eq('encuentro_id', id).gte('tomado_en', hace24h).order('tomado_en', { ascending: false }),
@@ -271,7 +271,7 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h1 className="text-xl font-semibold text-slate-900">{nombreCompleto(p)}</h1>
               <span className="text-sm text-slate-600">
-                <strong>{cama.data?.cama ?? 'Sin cama'}</strong> · {cama.data?.servicio_nombre} · Folio {encuentro.folio as string}
+                <strong>{cama.data?.cama ?? 'Sin cama'}</strong>{cama.data?.area_nombre ? ` · ${cama.data.area_nombre}` : ''} · {cama.data?.servicio_nombre} · Folio {encuentro.folio as string}
               </span>
             </div>
             <p className="mt-1 text-sm text-slate-600">

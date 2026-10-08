@@ -15,6 +15,7 @@ import {
   type Cie10,
   type DxElegido,
   type Medicamento,
+  type MedVigente,
   type OrdenNueva,
 } from '@/lib/medica'
 
@@ -28,12 +29,14 @@ export function FormNotaMedica({
   buscarMedicamentos,
   tipoInicial,
   esResidente,
+  vigentes = [],
 }: {
   accion: Accion
   buscarCie10: (q: string) => Promise<Cie10[]>
   buscarMedicamentos: (q: string) => Promise<Medicamento[]>
   tipoInicial: string
   esResidente: boolean
+  vigentes?: MedVigente[]
 }) {
   const [tipo, setTipo] = useState(tipoInicial)
   const [diagnosticos, setDiagnosticos] = useState<DxElegido[]>([])
@@ -189,6 +192,7 @@ export function FormNotaMedica({
                     duracion_dias: o.duracion_dias,
                     indicaciones: o.indicaciones,
                     prioridad: o.prioridad,
+                    justificacion_duplicado: o.justificacion_duplicado,
                   }
                 : o
             )
@@ -201,6 +205,10 @@ export function FormNotaMedica({
           alAgregar={(o) => setOrdenes((os) => [...os, o])}
           alCambiar={setPendiente}
           agregadas={ordenes.length}
+          yaOrdenados={[
+            ...vigentes,
+            ...ordenes.flatMap((o) => (o.tipo === 'medicamento' ? [{ medicamento_id: o.medicamento_id, descripcion: `${resumenOrden(o)} (en esta nota)` }] : [])),
+          ]}
         />
       </fieldset>
 
@@ -313,11 +321,13 @@ function NuevaOrden({
   alAgregar,
   alCambiar,
   agregadas,
+  yaOrdenados,
 }: {
   buscarMedicamentos: (q: string) => Promise<Medicamento[]>
   alAgregar: (o: OrdenNueva) => void
   alCambiar: (pendiente: string) => void
   agregadas: number
+  yaOrdenados: MedVigente[]
 }) {
   const [tipo, setTipo] = useState<OrdenNueva['tipo']>('medicamento')
   const [prioridad, setPrioridad] = useState('rutina')
@@ -332,6 +342,9 @@ function NuevaOrden({
   const [duracion, setDuracion] = useState('')
   const [indicaciones, setIndicaciones] = useState('')
   const [aviso, setAviso] = useState<string | null>(null)
+  const [justificacion, setJustificacion] = useState('')
+  // ¿El medicamento elegido ya está ordenado? (vigente o en esta misma nota)
+  const duplicado = med ? yaOrdenados.filter((v) => v.medicamento_id === med.id) : []
 
   // Avisa al formulario si hay una orden escrita que todavía no se agrega
   const resumenPendiente =
@@ -370,6 +383,7 @@ function NuevaOrden({
     setIndicaciones('')
     setPrioridad('rutina')
     setAviso(null)
+    setJustificacion('')
   }
 
   function agregar() {
@@ -380,6 +394,8 @@ function NuevaOrden({
       const horas = frecuencia === '' ? null : Number(frecuencia)
       const dias = duracion ? Number(duracion) : null
       if (horas === null && !prn && dias) return setAviso('Una dosis única no lleva duración en días.')
+      if (duplicado.length && justificacion.trim().length < 5)
+        return setAviso('Orden duplicada: suspende la orden anterior o escribe por qué se necesitan las dos.')
       alAgregar({
         tipo,
         medicamento_id: med.id,
@@ -392,6 +408,7 @@ function NuevaOrden({
         duracion_dias: dias,
         indicaciones: indicaciones.trim(),
         prioridad,
+        justificacion_duplicado: duplicado.length ? justificacion.trim() : undefined,
       })
     } else {
       if (!descripcion.trim()) return setAviso('Escribe la indicación.')
@@ -534,6 +551,21 @@ function NuevaOrden({
             Indicaciones
             <input value={indicaciones} onChange={(e) => setIndicaciones(e.target.value)} placeholder="Diluir en 100 mL, pasar en 30 min…" className={claseCampo} />
           </label>
+          {duplicado.length > 0 && (
+            <div role="alert" className="rounded-lg border border-amber-400 bg-amber-50 p-2 text-sm text-amber-950">
+              <p className="font-semibold">⚠ Orden duplicada: el paciente ya tiene {med?.denominacion_generica}</p>
+              <ul className="ml-4 list-disc">
+                {duplicado.map((d, i) => (
+                  <li key={i}>{d.descripcion}</li>
+                ))}
+              </ul>
+              <p className="mt-1 text-xs">Lo habitual es suspender la orden anterior. Si de verdad se necesitan las dos, escribe por qué:</p>
+              <label className={claseEtiqueta}>
+                Justificación de la orden duplicada
+                <input value={justificacion} onChange={(e) => setJustificacion(e.target.value)} placeholder="Dosis de rescate, ajuste temporal…" className={claseCampo} />
+              </label>
+            </div>
+          )}
         </>
       ) : (
         <label className={claseEtiqueta}>

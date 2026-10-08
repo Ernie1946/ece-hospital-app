@@ -40,7 +40,7 @@ import { ESTADO_DOSIS, cantidad, horaCorta } from '@/lib/farmacia'
 import { PlanCuidados } from '@/components/PlanCuidados'
 import { sugerencias, type DiagnosticoEnf, type EvaluacionPlan, type PlanCuidado } from '@/lib/cuidados'
 import { cerrarPlanCuidado, crearPlanCuidado, evaluarPlanCuidado } from '../../acciones'
-import { NOMBRE_NOTA, PRIORIDADES, TIPOS_NOTA_MEDICA, TITULOS_CAMPOS, TIPO_ORDEN, estadoOrden } from '@/lib/medica'
+import { NOMBRE_NOTA, PRIORIDADES, TIPOS_NOTA_MEDICA, TITULOS_CAMPOS, TIPO_ORDEN, estadoOrden, idsDuplicadas } from '@/lib/medica'
 
 // ---------------------------------------------------------------------
 // Hoja de enfermería: signos vitales, escalas, control de líquidos y
@@ -64,7 +64,7 @@ type Orden = {
   tipo: string
   estado: string
   prioridad: string
-  detalle: { descripcion?: string; indicaciones?: string }
+  detalle: { descripcion?: string; indicaciones?: string; justificacion_duplicado?: string }
   solicitada_en: string | null
   ordenada_por: string
 }
@@ -150,7 +150,7 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
   if (!p) notFound()
 
   // Medicación del paciente (dosis unitarias de farmacia) y órdenes PRN
-  const ordenesMed = ((ordenes.data ?? []) as Orden[]).filter((o) => o.tipo === 'medicamento' && ['validada', 'en_proceso'].includes(o.estado))
+  const ordenesMed = ((ordenes.data ?? []) as Orden[]).filter((o) => o.tipo === 'medicamento')
   const [dosisQ, prnQ, enfermerasQ, notasMedQ] = await Promise.all([
     supabase
       .schema('farmacia')
@@ -161,7 +161,7 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
       .neq('estado', 'cancelada')
       .order('hora_programada'),
     ordenesMed.length
-      ? supabase.schema('farmacia').from('orden_medicamento').select('orden_id').eq('prn', true).in('orden_id', ordenesMed.map((o) => o.id))
+      ? supabase.schema('farmacia').from('orden_medicamento').select('orden_id, prn, medicamento_id').in('orden_id', ordenesMed.map((o) => o.id))
       : Promise.resolve({ data: [] }),
     supabase.schema('seguridad').from('usuario').select('id, nombre, primer_apellido').eq('rol', 'enfermeria').eq('activo', true).neq('id', perfil.id).order('primer_apellido'),
     // Notas médicas (solo lectura para enfermería): la más reciente y el total
@@ -186,8 +186,19 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
     ? await supabase.schema('clinico').from('pulsera').select('codigo_barras').eq('encuentro_id', id).eq('activa', true).maybeSingle()
     : { data: null }
   const pulseraActiva = (pul?.codigo_barras as string | undefined) ?? null
-  const idsPrn = new Set(((prnQ.data ?? []) as { orden_id: string }[]).map((x) => x.orden_id))
-  const ordenesPrn = ordenesMed.filter((o) => idsPrn.has(o.id))
+  const medsOrden = (prnQ.data ?? []) as { orden_id: string; prn: boolean; medicamento_id: number }[]
+  const idsPrn = new Set(medsOrden.filter((x) => x.prn).map((x) => x.orden_id))
+  const ordenesPrn = ordenesMed.filter((o) => idsPrn.has(o.id) && ['validada', 'en_proceso'].includes(o.estado))
+  // Mismo medicamento en dos órdenes vigentes: se marca para que enfermería lo detecte
+  const duplicadas = idsDuplicadas(
+    medsOrden.map((m) => ({ id: m.orden_id, medicamento_id: m.medicamento_id, justificacion: ordenesMed.find((o) => o.id === m.orden_id)?.detalle?.justificacion_duplicado }))
+  )
+  const marcaDuplicada = (o: Orden) =>
+    duplicadas.has(o.id) ? (
+      <span className="ml-1 rounded bg-amber-200 px-1 text-xs font-semibold text-amber-950">
+        Duplicada{duplicadas.get(o.id) ? ` · justificación: ${duplicadas.get(o.id)}` : ' · sin justificación: consultar al médico'}
+      </span>
+    ) : null
   const enviosPendientes = [...new Set(listaDosis.filter((d) => d.estado === 'enviada' && d.envio_id).map((d) => d.envio_id as string))]
   const verificadores = ((enfermerasQ.data ?? []) as { id: string; nombre: string; primer_apellido: string }[]).map((u) => ({
     id: u.id,
@@ -388,6 +399,7 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
                             <span className="mr-1 rounded bg-red-100 px-1 text-xs text-red-800">{PRIORIDADES[o.prioridad]}</span>
                           )}
                           {o.detalle?.descripcion}
+                          {marcaDuplicada(o)}
                         </p>
                         {o.detalle?.indicaciones && <p className="text-slate-700">{o.detalle.indicaciones}</p>}
                         <p className="text-xs text-slate-500">
@@ -425,6 +437,7 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
                             <span className={`mr-1 rounded px-1 text-xs ${e.color}`}>{e.texto}</span>
                             <span className="text-slate-500">{TIPO_ORDEN[o.tipo]}:</span> {o.detalle?.descripcion}
                             {o.detalle?.indicaciones ? ` (${o.detalle.indicaciones})` : ''}
+                            {marcaDuplicada(o)}
                           </li>
                         )
                       })}

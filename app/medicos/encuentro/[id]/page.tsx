@@ -8,7 +8,7 @@ import { FormAccion } from '@/components/FormAccion'
 import { FormNotaMedica } from '@/components/FormNotaMedica'
 import { claseCampo, claseEtiqueta, claseTarjeta } from '@/lib/estilos'
 import { ahora, edad, fechaHora, nombreCompleto } from '@/lib/formato'
-import { NOMBRE_NOTA, PRIORIDADES, TIPO_DIAGNOSTICO, TIPO_ORDEN, TIPOS_NOTA_MEDICA, TITULOS_CAMPOS, esMedico, estadoOrden } from '@/lib/medica'
+import { NOMBRE_NOTA, PRIORIDADES, TIPO_DIAGNOSTICO, TIPO_ORDEN, TIPOS_NOTA_MEDICA, TITULOS_CAMPOS, esMedico, estadoOrden, idsDuplicadas } from '@/lib/medica'
 import { buscarCie10, buscarMedicamentos, cofirmarNota, registrarNotaMedica, suspenderOrden } from '../../acciones'
 import { solicitarAccesoEmergencia } from '../../../enfermeria/acciones'
 
@@ -24,7 +24,7 @@ type Orden = {
   tipo: string
   estado: string
   prioridad: string
-  detalle: { descripcion?: string; indicaciones?: string }
+  detalle: { descripcion?: string; indicaciones?: string; justificacion_duplicado?: string }
   motivo_rechazo: string | null
   motivo_suspension: string | null
   creado_en: string
@@ -112,6 +112,14 @@ export default async function ExpedienteMedicoPage({ params }: PageProps<'/medic
   const descripcionDx = new Map((descripciones ?? []).map((c) => [c.codigo as string, c.descripcion as string]))
   const ultimo = signos.data?.[0]
   const vigentes = listaOrdenes.filter((o) => ['solicitada', 'validada', 'en_proceso'].includes(o.estado))
+  // Medicamentos vigentes (para avisar de órdenes duplicadas)
+  const idsMed = vigentes.filter((o) => o.tipo === 'medicamento').map((o) => o.id)
+  const { data: medsQ } = idsMed.length
+    ? await supabase.schema('farmacia').from('orden_medicamento').select('orden_id, medicamento_id').in('orden_id', idsMed)
+    : { data: [] }
+  const medDe = new Map(((medsQ ?? []) as { orden_id: string; medicamento_id: number }[]).map((m) => [m.orden_id, m.medicamento_id]))
+  const medVigentes = vigentes.filter((o) => medDe.has(o.id)).map((o) => ({ medicamento_id: medDe.get(o.id)!, descripcion: o.detalle?.descripcion ?? '' }))
+  const duplicadas = idsDuplicadas(vigentes.filter((o) => medDe.has(o.id)).map((o) => ({ id: o.id, medicamento_id: medDe.get(o.id)!, justificacion: o.detalle?.justificacion_duplicado })))
   const ordenesDe = new Map<string, Orden[]>()
   for (const o of listaOrdenes) ordenesDe.set(o.documento_id, [...(ordenesDe.get(o.documento_id) ?? []), o])
 
@@ -202,6 +210,7 @@ export default async function ExpedienteMedicoPage({ params }: PageProps<'/medic
                       buscarMedicamentos={buscarMedicamentos}
                       tipoInicial={listaNotas.some((n) => n.tipo === 'nota_ingreso') ? 'nota_evolucion' : 'nota_ingreso'}
                       esResidente={perfil.rol === 'medico_residente'}
+                      vigentes={medVigentes}
                     />
                   </section>
                 ) : (
@@ -332,6 +341,11 @@ export default async function ExpedienteMedicoPage({ params }: PageProps<'/medic
                             <span className={`mr-1 rounded px-1 text-xs ${e.color}`}>{e.texto}</span>
                             {o.prioridad !== 'rutina' && <span className="mr-1 rounded bg-red-100 px-1 text-xs text-red-800">{PRIORIDADES[o.prioridad]}</span>}
                             <span className="text-slate-500">{TIPO_ORDEN[o.tipo]}:</span> {o.detalle?.descripcion}
+                            {duplicadas.has(o.id) && (
+                              <span className="ml-1 rounded bg-amber-200 px-1 text-xs font-semibold text-amber-950">
+                                Duplicada{duplicadas.get(o.id) ? `: ${duplicadas.get(o.id)}` : ' — suspende una'}
+                              </span>
+                            )}
                           </p>
                           {puedeEscribir && (
                             <details className="mt-1">

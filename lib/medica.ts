@@ -145,6 +145,7 @@ export type OrdenNueva =
       duracion_dias: number | null
       indicaciones: string
       prioridad: string
+      justificacion_duplicado?: string
     }
   | { tipo: 'dieta' | 'estudio' | 'cuidado_enfermeria' | 'interconsulta'; descripcion: string; prioridad: string }
 
@@ -157,5 +158,22 @@ export function resumenOrden(o: OrdenNueva) {
       : 'dosis única'
   return `${o.nombre} · ${o.dosis} ${o.unidad} ${o.via} ${frec}${o.duracion_dias ? ` por ${o.duracion_dias} días` : ''}${
     o.indicaciones ? ` (${o.indicaciones})` : ''
-  }`
+  }${o.justificacion_duplicado ? ` · Duplicada: ${o.justificacion_duplicado}` : ''}`
+}
+
+// Medicamento ya ordenado y vigente en el ingreso (para detectar duplicados)
+export type MedVigente = { medicamento_id: number; descripcion: string }
+
+// Órdenes de medicamento vigentes que repiten el mismo medicamento.
+// Devuelve id → justificación del médico (la de cualquiera de las órdenes del grupo) o null.
+export function idsDuplicadas(ordenes: { id: string; medicamento_id: number; justificacion?: string | null }[]) {
+  const grupos = new Map<number, typeof ordenes>()
+  for (const o of ordenes) grupos.set(o.medicamento_id, [...(grupos.get(o.medicamento_id) ?? []), o])
+  const r = new Map<string, string | null>()
+  for (const g of grupos.values()) {
+    if (g.length < 2) continue
+    const j = g.find((o) => o.justificacion)?.justificacion ?? null
+    for (const o of g) r.set(o.id, j)
+  }
+  return r
 }

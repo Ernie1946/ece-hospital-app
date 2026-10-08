@@ -39,6 +39,23 @@ export const TIPOS_NOTA: Record<string, { nombre: string; campos: CampoNota[] }>
   },
 }
 
+// Nombre de cada tipo de nota médica (incluye las de anestesia)
+export const NOMBRE_NOTA: Record<string, string> = {
+  nota_urgencias: 'Nota de urgencias',
+  nota_preoperatoria: 'Nota preoperatoria',
+  nota_postoperatoria: 'Nota postoperatoria',
+  nota_preanestesica: 'Nota preanestésica',
+  registro_anestesico: 'Registro transanestésico',
+  nota_postanestesica: 'Nota postanestésica (alta de recuperación)',
+  nota_traslado: 'Nota de traslado',
+  nota_preegreso: 'Nota de preegreso',
+  nota_egreso: 'Nota de egreso',
+  historia_clinica: 'Historia clínica',
+  nota_correccion: 'Nota de corrección',
+  ...Object.fromEntries(Object.entries(TIPOS_NOTA).map(([k, v]) => [k, v.nombre])),
+}
+export const TIPOS_NOTA_MEDICA = Object.keys(NOMBRE_NOTA)
+
 // Orden de presentación de cualquier contenido de nota
 export const TITULOS_CAMPOS: Record<string, string> = {
   motivo_ingreso: 'Motivo de ingreso',

@@ -40,7 +40,7 @@ import { ESTADO_DOSIS, cantidad, horaCorta } from '@/lib/farmacia'
 import { PlanCuidados } from '@/components/PlanCuidados'
 import { sugerencias, type DiagnosticoEnf, type EvaluacionPlan, type PlanCuidado } from '@/lib/cuidados'
 import { cerrarPlanCuidado, crearPlanCuidado, evaluarPlanCuidado } from '../../acciones'
-import { PRIORIDADES, TIPO_ORDEN, estadoOrden } from '@/lib/medica'
+import { NOMBRE_NOTA, PRIORIDADES, TIPOS_NOTA_MEDICA, TITULOS_CAMPOS, TIPO_ORDEN, estadoOrden } from '@/lib/medica'
 
 // ---------------------------------------------------------------------
 // Hoja de enfermería: signos vitales, escalas, control de líquidos y
@@ -151,7 +151,7 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
 
   // Medicación del paciente (dosis unitarias de farmacia) y órdenes PRN
   const ordenesMed = ((ordenes.data ?? []) as Orden[]).filter((o) => o.tipo === 'medicamento' && ['validada', 'en_proceso'].includes(o.estado))
-  const [dosisQ, prnQ, enfermerasQ] = await Promise.all([
+  const [dosisQ, prnQ, enfermerasQ, notasMedQ] = await Promise.all([
     supabase
       .schema('farmacia')
       .from('v_dosis')
@@ -164,7 +164,21 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
       ? supabase.schema('farmacia').from('orden_medicamento').select('orden_id').eq('prn', true).in('orden_id', ordenesMed.map((o) => o.id))
       : Promise.resolve({ data: [] }),
     supabase.schema('seguridad').from('usuario').select('id, nombre, primer_apellido').eq('rol', 'enfermeria').eq('activo', true).neq('id', perfil.id).order('primer_apellido'),
+    // Notas médicas (solo lectura para enfermería): la más reciente y el total
+    supabase
+      .schema('clinico')
+      .from('documento_clinico')
+      .select('id, tipo, contenido, creado_en, firma(tipo, nombre_firmante, firmado_en)', { count: 'exact' })
+      .eq('encuentro_id', id)
+      .in('tipo', TIPOS_NOTA_MEDICA)
+      .in('estado', ['firmado', 'pendiente_cofirma'])
+      .order('creado_en', { ascending: false })
+      .limit(1),
   ])
+  const ultimaNotaMed = (notasMedQ.data?.[0] ?? null) as
+    | { id: string; tipo: string; contenido: Record<string, string>; creado_en: string; firma: { tipo: string; nombre_firmante: string; firmado_en: string }[] }
+    | null
+  const totalNotasMed = notasMedQ.count ?? 0
   const listaDosis = (dosisQ.data ?? []) as DosisPiso[]
   // Modo de prueba (ECE_MODO_PRUEBA=1 en .env.local): muestra los códigos para usarlos sin lector
   const modoPrueba = process.env.ECE_MODO_PRUEBA === '1'
@@ -326,6 +340,41 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
 
           {puedeVer && (
             <>
+              {/* Última nota médica (consulta) */}
+              <section className={claseTarjeta}>
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <h2 className="text-sm font-semibold text-slate-800">Última nota médica</h2>
+                  <Link href={`/medicos/encuentro/${id}`} className="text-sm text-sky-700 hover:underline">
+                    Ver todas las notas médicas ({totalNotasMed}) →
+                  </Link>
+                </div>
+                {ultimaNotaMed ? (
+                  (() => {
+                    const autor = ultimaNotaMed.firma.find((f) => f.tipo === 'autor')
+                    return (
+                      <div className="mt-1 text-sm">
+                        <p className="text-xs font-semibold uppercase text-slate-500">
+                          {NOMBRE_NOTA[ultimaNotaMed.tipo] ?? ultimaNotaMed.tipo} · {fechaHora(autor?.firmado_en ?? ultimaNotaMed.creado_en)}
+                          {autor ? ` · ${autor.nombre_firmante}` : ''}
+                        </p>
+                        <dl className="mt-1 space-y-1">
+                          {Object.entries(TITULOS_CAMPOS)
+                            .filter(([k]) => ['evolucion', 'motivo_ingreso', 'diagnostico', 'plan', 'sugerencias'].includes(k) && ultimaNotaMed.contenido[k])
+                            .map(([k, titulo]) => (
+                              <div key={k}>
+                                <dt className="inline font-medium text-slate-700">{titulo}: </dt>
+                                <dd className="inline whitespace-pre-line text-slate-900">{ultimaNotaMed.contenido[k]}</dd>
+                              </div>
+                            ))}
+                        </dl>
+                      </div>
+                    )
+                  })()
+                ) : (
+                  <p className="mt-1 text-sm text-slate-500">Sin notas médicas.</p>
+                )}
+              </section>
+
               {/* Órdenes médicas */}
               <section className={claseTarjeta}>
                 <h2 className="text-sm font-semibold text-slate-800">Órdenes médicas</h2>

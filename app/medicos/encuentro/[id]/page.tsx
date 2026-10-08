@@ -8,7 +8,7 @@ import { FormAccion } from '@/components/FormAccion'
 import { FormNotaMedica } from '@/components/FormNotaMedica'
 import { claseCampo, claseEtiqueta, claseTarjeta } from '@/lib/estilos'
 import { ahora, edad, fechaHora, nombreCompleto } from '@/lib/formato'
-import { PRIORIDADES, TIPO_DIAGNOSTICO, TIPO_ORDEN, TIPOS_NOTA, TITULOS_CAMPOS, esMedico, estadoOrden } from '@/lib/medica'
+import { NOMBRE_NOTA, PRIORIDADES, TIPO_DIAGNOSTICO, TIPO_ORDEN, TIPOS_NOTA_MEDICA, TITULOS_CAMPOS, esMedico, estadoOrden } from '@/lib/medica'
 import { buscarCie10, buscarMedicamentos, cofirmarNota, registrarNotaMedica, suspenderOrden } from '../../acciones'
 import { solicitarAccesoEmergencia } from '../../../enfermeria/acciones'
 
@@ -39,21 +39,6 @@ type Nota = {
 }
 type Dx = { id: string; cie10: string; tipo: string; registrado_en: string }
 
-const NOMBRE_NOTA: Record<string, string> = {
-  nota_urgencias: 'Nota de urgencias',
-  nota_preoperatoria: 'Nota preoperatoria',
-  nota_postoperatoria: 'Nota postoperatoria',
-  nota_preanestesica: 'Nota preanestésica',
-  registro_anestesico: 'Registro transanestésico',
-  nota_postanestesica: 'Nota postanestésica (alta de recuperación)',
-  nota_traslado: 'Nota de traslado',
-  nota_preegreso: 'Nota de preegreso',
-  nota_egreso: 'Nota de egreso',
-  historia_clinica: 'Historia clínica',
-  nota_correccion: 'Nota de corrección',
-  ...Object.fromEntries(Object.entries(TIPOS_NOTA).map(([k, v]) => [k, v.nombre])),
-}
-const TIPOS_NOTA_MEDICA = Object.keys(NOMBRE_NOTA)
 
 export default async function ExpedienteMedicoPage({ params }: PageProps<'/medicos/encuentro/[id]'>) {
   const { perfil, email } = await obtenerPerfil()
@@ -116,6 +101,7 @@ export default async function ExpedienteMedicoPage({ params }: PageProps<'/medic
   const vigente = ['activo', 'alta_medica'].includes(encuentro.estado as string)
   const puedeEscribir = medicoSesion && puedeVer && vigente
   const esTratante = perfil.rol === 'medico_tratante'
+  const esEnfermeria = perfil.rol === 'enfermeria'
 
   const listaNotas = (notas.data ?? []) as Nota[]
   const listaOrdenes = (ordenes.data ?? []) as Orden[]
@@ -131,22 +117,30 @@ export default async function ExpedienteMedicoPage({ params }: PageProps<'/medic
 
   return (
     <>
-      <Encabezado perfil={perfil} activo="medicos" />
+      <Encabezado perfil={perfil} activo={esEnfermeria ? 'enfermeria' : 'medicos'} />
       <main className="flex-1 bg-slate-100">
         <div className="max-w-6xl mx-auto px-4 py-4 space-y-4">
           <div className="flex flex-wrap justify-between gap-2 text-sm">
-            <Link href="/medicos" className="text-sky-700 hover:underline">
-              ← Tablero médico
-            </Link>
+            {esEnfermeria ? (
+              <Link href={`/enfermeria/encuentro/${id}`} className="text-sky-700 hover:underline">
+                ← Hoja de enfermería
+              </Link>
+            ) : (
+              <Link href="/medicos" className="text-sky-700 hover:underline">
+                ← Tablero médico
+              </Link>
+            )}
             <span className="flex gap-4">
               {medicoSesion && vigente && (
                 <Link href={`/anestesia?encuentro=${id}#programar`} className="text-sky-700 hover:underline">
                   Programar cirugía
                 </Link>
               )}
-              <Link href={`/enfermeria/encuentro/${id}`} className="text-sky-700 hover:underline">
-                Hoja de enfermería →
-              </Link>
+              {!esEnfermeria && (
+                <Link href={`/enfermeria/encuentro/${id}`} className="text-sky-700 hover:underline">
+                  Hoja de enfermería →
+                </Link>
+              )}
             </span>
           </div>
 
@@ -212,7 +206,11 @@ export default async function ExpedienteMedicoPage({ params }: PageProps<'/medic
                   </section>
                 ) : (
                   <p className="text-sm text-slate-600 bg-white border border-slate-200 rounded-lg px-3 py-2">
-                    {vigente ? 'Vista de consulta: las notas las escribe el personal médico.' : 'Este ingreso ya no está activo; el expediente queda en modo consulta.'}
+                    {!vigente
+                      ? 'Este ingreso ya no está activo; el expediente queda en modo consulta.'
+                      : esEnfermeria
+                        ? 'Consulta para enfermería: puedes leer las notas y órdenes médicas, sin modificarlas.'
+                        : 'Vista de consulta: las notas las escribe el personal médico.'}
                   </p>
                 )}
 

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { cerrarSesion } from '@/lib/sesion'
 import { etiquetaRol } from '@/lib/roles'
 import type { Perfil } from '@/lib/perfil'
@@ -10,6 +11,7 @@ const SECCIONES = [
   { href: '/enfermeria', clave: 'enfermeria', nombre: 'Enfermería' },
   { href: '/anestesia', clave: 'anestesia', nombre: 'Anestesia' },
   { href: '/farmacia', clave: 'farmacia', nombre: 'Farmacia' },
+  { href: '/personal', clave: 'personal', nombre: 'Personal' },
 ] as const
 
 export function Encabezado({
@@ -19,13 +21,16 @@ export function Encabezado({
   perfil: Perfil
   activo: (typeof SECCIONES)[number]['clave']
 }) {
+  // Contraseña temporal: hay que cambiarla antes de usar el expediente
+  if (perfil.debe_cambiar_contrasena) redirect('/cuenta/contrasena')
+  const secciones = SECCIONES.filter((s) => s.clave !== 'personal' || perfil.rol === 'admin_sistema')
   return (
     <header className="bg-white border-b border-slate-200 print:hidden">
       <div className="max-w-7xl mx-auto px-4 py-2 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-6">
           <span className="font-semibold text-slate-900">ECE Hospital</span>
           <nav className="flex gap-1 text-sm" aria-label="Secciones">
-            {SECCIONES.map((s) => (
+            {secciones.map((s) => (
               <Link
                 key={s.clave}
                 href={s.href}
@@ -46,6 +51,9 @@ export function Encabezado({
               {etiquetaRol(perfil.rol)}
             </span>
           </span>
+          <Link href="/cuenta/contrasena" className="text-slate-600 hover:underline">
+            Contraseña
+          </Link>
           <form action={cerrarSesion}>
             <button className="text-sky-700 hover:underline">Salir</button>
           </form>

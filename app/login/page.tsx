@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { crearClienteNavegador } from '@/lib/supabase/client'
+import { DOMINIO_USUARIOS } from '@/lib/personal'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -17,15 +18,19 @@ export default function LoginPage() {
     setError(null)
 
     const supabase = crearClienteNavegador()
+    // Se entra con el usuario (número de empleado, credencial…) o con el correo
+    const identificador = correo.trim().toLowerCase()
+    const { data: acceso } = await supabase.schema('seguridad').rpc('correo_de_acceso', { p_identificador: identificador })
+    const email = (acceso as string | null) ?? (identificador.includes('@') ? identificador : `${identificador}@${DOMINIO_USUARIOS}`)
     const { error } = await supabase.auth.signInWithPassword({
-      email: correo.trim(),
+      email,
       password: contrasena,
     })
 
     if (error) {
       setError(
         error.message === 'Invalid login credentials'
-          ? 'Correo o contraseña incorrectos.'
+          ? 'Usuario o contraseña incorrectos.'
           : error.message
       )
       setEnviando(false)
@@ -48,10 +53,13 @@ export default function LoginPage() {
         </div>
 
         <label className="block">
-          <span className="text-sm font-medium text-slate-700">Correo</span>
+          <span className="text-sm font-medium text-slate-700">Usuario o correo</span>
           <input
-            type="email"
+            type="text"
             required
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
             autoComplete="username"
             value={correo}
             onChange={(e) => setCorreo(e.target.value)}

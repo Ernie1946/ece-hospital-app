@@ -9,6 +9,7 @@ import { ahora, fechaHora } from '@/lib/formato'
 import { alertasSignos, HORAS_SIN_SIGNOS, type Signos } from '@/lib/clinica'
 import { cambiarEstadoCama, registrarLlegada } from './acciones'
 import { TIPO_LUGAR, conSubareas, ordenarAreas, type Area } from '@/lib/areas'
+import type { AsignacionFila, TurnoActual } from '@/lib/turnos'
 
 // ---------------------------------------------------------------------
 // Tablero de enfermería por área: llegadas pendientes, pacientes en
@@ -42,19 +43,34 @@ export default async function EnfermeriaPage({ searchParams }: PageProps<'/enfer
   if (!perfil) return <SinAlta email={email} />
 
   const supabase = await crearClienteServidor()
-  const [{ data: areasData }, { data: camasArea }, { data: servicioUsuario }] = await Promise.all([
+  const [{ data: areasData }, { data: camasArea }, { data: servicioUsuario }, { data: turnoData }] = await Promise.all([
     supabase.schema('catalogo').from('area').select('id, clave, nombre, tipo, censable, padre_id, orden').eq('activo', true),
     supabase.schema('camas').from('cama').select('area_id').eq('activa', true),
     perfil.servicio_id
       ? supabase.schema('catalogo').from('servicio').select('clave').eq('id', perfil.servicio_id).maybeSingle()
       : Promise.resolve({ data: null }),
+    supabase.schema('catalogo').rpc('turno_actual'),
   ])
+  // Turno en curso y camas asignadas a esta enfermera
+  const turno = ((turnoData ?? []) as TurnoActual[])[0] ?? null
+  const { data: misData } = turno
+    ? await supabase
+        .schema('clinico')
+        .from('v_asignacion_enfermeria')
+        .select('cama')
+        .eq('fecha', turno.fecha)
+        .eq('turno', turno.clave)
+        .eq('enfermera_id', perfil.id)
+    : { data: [] }
+  const misCamas = ((misData ?? []) as { cama: string }[]).map((x) => x.cama)
   const todas = ordenarAreas((areasData ?? []) as Area[])
   const conCamas = new Set(((camasArea ?? []) as { area_id: number }[]).map((c) => c.area_id))
   const areas = todas.filter((a) => conCamas.has(a.id) || todas.some((h) => h.padre_id === a.id && conCamas.has(h.id)))
 
   // Área elegida: la de la URL, o el área base de la enfermera, o la de su servicio, o la primera
-  const { area: elegido } = await searchParams
+  const { area: pedido } = await searchParams
+  const verMias = misCamas.length > 0 && (pedido === 'mis' || pedido === undefined)
+  const elegido = verMias ? undefined : pedido
   const servicio =
     areas.find((a) => a.clave === elegido) ??
     areas.find((a) => a.id === perfil.area_id) ??
@@ -62,11 +78,24 @@ export default async function EnfermeriaPage({ searchParams }: PageProps<'/enfer
     areas[0]
   const clavesVisibles = servicio ? conSubareas(todas, servicio.id) : []
 
-  const { data: censoData } = await supabase
+  const consultaCenso = supabase
     .schema('camas')
     .from('v_censo')
     .select('cama, servicio, servicio_nombre, area_nombre, tipo_lugar, estado, estado_desde, encuentro_id, paciente, sexo, edad, dias_estancia, alergias, aislamiento, medico_tratante')
-    .in('area', clavesVisibles)
+  const { data: censoData } = verMias ? await consultaCenso.in('cama', misCamas) : await consultaCenso.in('area', clavesVisibles)
+
+  // Enfermera asignada a cada cama en el turno en curso
+  const camasVistas = ((censoData ?? []) as CamaCenso[]).map((c) => c.cama)
+  const { data: asigData } = turno && camasVistas.length
+    ? await supabase
+        .schema('clinico')
+        .from('v_asignacion_enfermeria')
+        .select('cama, enfermera_id, enfermera')
+        .eq('fecha', turno.fecha)
+        .eq('turno', turno.clave)
+        .in('cama', camasVistas)
+    : { data: [] }
+  const enfermeraDe = new Map(((asigData ?? []) as AsignacionFila[]).map((a) => [a.cama, a]))
 
   const camas = ((censoData ?? []) as CamaCenso[]).sort((a, b) => a.cama.localeCompare(b.cama, 'es', { numeric: true }))
   const llegadas = camas.filter((c) => c.estado === 'reservada' && c.encuentro_id)
@@ -99,9 +128,13 @@ export default async function EnfermeriaPage({ searchParams }: PageProps<'/enfer
       <main className="flex-1 bg-slate-100">
         <div className="max-w-7xl mx-auto px-4 py-4 space-y-4">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h1 className="text-lg font-semibold text-slate-900">Enfermería · {servicio?.nombre}</h1>
+            <h1 className="text-lg font-semibold text-slate-900">Enfermería · {verMias ? 'Mis camas de este turno' : servicio?.nombre}</h1>
             <p className="text-sm text-slate-600">
               {enPiso.length} en piso · {llegadas.length} por llegar · {disponibles} disponibles
+              {turno && ` · ${turno.nombre}`} ·{' '}
+              <Link href="/enfermeria/asignacion" className="text-sky-700 hover:underline">
+                Asignación del turno →
+              </Link>
             </p>
           </div>
 
@@ -113,13 +146,24 @@ export default async function EnfermeriaPage({ searchParams }: PageProps<'/enfer
 
           {/* Áreas */}
           <nav className="flex flex-wrap gap-2 text-sm" aria-label="Área">
+            {misCamas.length > 0 && (
+              <Link
+                href="/enfermeria?area=mis"
+                aria-current={verMias ? 'page' : undefined}
+                className={`rounded-full border px-3 py-1 font-medium ${
+                  verMias ? 'bg-emerald-700 border-emerald-700 text-white' : 'bg-white border-emerald-600 text-emerald-800 hover:bg-emerald-50'
+                }`}
+              >
+                Mis camas ({misCamas.length})
+              </Link>
+            )}
             {areas.map((s) => (
               <Link
                 key={s.id}
                 href={`/enfermeria?area=${s.clave}`}
-                aria-current={s.clave === servicio?.clave ? 'page' : undefined}
+                aria-current={!verMias && s.clave === servicio?.clave ? 'page' : undefined}
                 className={`rounded-full border px-3 py-1 ${
-                  s.clave === servicio?.clave
+                  !verMias && s.clave === servicio?.clave
                     ? 'bg-sky-700 border-sky-700 text-white'
                     : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
                 }`}
@@ -160,7 +204,7 @@ export default async function EnfermeriaPage({ searchParams }: PageProps<'/enfer
           {/* Pacientes en piso */}
           <section className="space-y-2">
             <h2 className="text-sm font-semibold text-slate-800">Pacientes en piso ({enPiso.length})</h2>
-            {enPiso.length === 0 && <p className="text-sm text-slate-500">Sin pacientes hospitalizados en esta área.</p>}
+            {enPiso.length === 0 && <p className="text-sm text-slate-500">{verMias ? 'Tus camas de este turno no tienen pacientes.' : 'Sin pacientes hospitalizados en esta área.'}</p>}
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {enPiso.map((c) => {
                 const s = ultimosSignos.get(c.encuentro_id!)
@@ -181,6 +225,11 @@ export default async function EnfermeriaPage({ searchParams }: PageProps<'/enfer
                     </div>
                     <p className="text-sm font-medium text-slate-900 leading-tight">{c.paciente}</p>
                     {c.medico_tratante && <p className="text-xs text-slate-500">Dr(a). {c.medico_tratante}</p>}
+                    {enfermeraDe.get(c.cama) && (
+                      <p className={`text-xs ${enfermeraDe.get(c.cama)!.enfermera_id === perfil.id ? 'font-medium text-emerald-800' : 'text-slate-500'}`}>
+                        Enf. {enfermeraDe.get(c.cama)!.enfermera}
+                      </p>
+                    )}
                     <div className="mt-1 flex flex-wrap gap-1 text-xs">
                       {c.servicio_nombre && <span className="rounded bg-sky-50 px-1 text-sky-900">{c.servicio_nombre}</span>}
                       {c.tipo_lugar !== 'cama' && <span className="rounded bg-slate-100 px-1">{TIPO_LUGAR[c.tipo_lugar]?.nombre}</span>}

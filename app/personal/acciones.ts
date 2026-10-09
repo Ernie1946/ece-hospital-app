@@ -153,3 +153,12 @@ export async function restablecerContrasena(id: string, usuario: string, nombre:
   revalidatePath('/personal')
   return { ok: 'Contraseña restablecida. Entrégala a la persona; al entrar se le pedirá cambiarla.', credencial: { usuario, nombre, contrasena: String(r.contrasena) } }
 }
+
+// Jefatura de Enfermería: asigna camas por turno y ve todo el hospital
+export async function marcarJefatura(id: string, valor: boolean): Promise<{ error?: string; ok?: string }> {
+  const supabase = await sesion()
+  const { error } = await supabase.schema('seguridad').rpc('marcar_jefatura', { p_usuario: id, p_valor: valor })
+  if (error) return { error: traducirError(error.message) }
+  revalidatePath(`/personal/${id}`)
+  return { ok: valor ? 'Ahora tiene Jefatura de Enfermería.' : 'Se quitó la Jefatura de Enfermería.' }
+}

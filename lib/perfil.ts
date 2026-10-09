@@ -11,6 +11,7 @@ export type Perfil = {
   area_id: number | null
   usuario: string
   debe_cambiar_contrasena: boolean
+  jefatura_enfermeria: boolean
 }
 
 // Usuario de la sesión + su perfil clínico (seguridad.usuario).
@@ -24,7 +25,7 @@ export const obtenerPerfil = cache(async (): Promise<{ perfil: Perfil | null; em
   const { data } = await supabase
     .schema('seguridad')
     .from('usuario')
-    .select('nombre, primer_apellido, rol, servicio_id, area_id, usuario, debe_cambiar_contrasena')
+    .select('nombre, primer_apellido, rol, servicio_id, area_id, usuario, debe_cambiar_contrasena, jefatura_enfermeria')
     .eq('id', auth.user.id)
     .maybeSingle()
 
@@ -33,3 +34,4 @@ export const obtenerPerfil = cache(async (): Promise<{ perfil: Perfil | null; em
 })
 
 export const esSistemas = (perfil: Perfil) => perfil.rol === 'admin_sistema'
+export const esJefatura = (perfil: Perfil) => perfil.rol === 'enfermeria' && perfil.jefatura_enfermeria

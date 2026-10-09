@@ -10,7 +10,8 @@ import { AccionesCuenta } from '@/components/AccionesCuenta'
 import { claseTarjeta } from '@/lib/estilos'
 import { fecha, fechaHora } from '@/lib/formato'
 import { ESTADO_CUENTA, SOLICITANTES } from '@/lib/personal'
-import { cambiarEstado, guardarUsuario, restablecerContrasena } from '../acciones'
+import { cambiarEstado, guardarUsuario, marcarJefatura, restablecerContrasena } from '../acciones'
+import { BotonAccion } from '@/components/BotonAccion'
 import { opcionesPersonal } from '../opciones'
 
 export default async function UsuarioPage({ params }: PageProps<'/personal/[id]'>) {
@@ -76,6 +77,21 @@ export default async function UsuarioPage({ params }: PageProps<'/personal/[id]'
             <h2 className="mb-2 text-sm font-semibold text-slate-800 print:hidden">Datos</h2>
             <FormUsuario accion={guardarUsuario.bind(null, true)} inicial={inicial} areas={areas} servicios={servicios} />
           </section>
+          {u.rol === 'enfermeria' && u.activo && (
+            <section className={`${claseTarjeta} space-y-2 text-sm print:hidden`}>
+              <h2 className="font-semibold text-slate-800">Jefatura de Enfermería</h2>
+              <p className="text-slate-600">
+                {u.jefatura_enfermeria
+                  ? 'Tiene Jefatura de Enfermería: asigna camas por turno y ve a todos los pacientes del hospital.'
+                  : 'Con Jefatura de Enfermería podrá asignar camas por turno y ver a todos los pacientes del hospital.'}
+              </p>
+              <BotonAccion
+                etiqueta={u.jefatura_enfermeria ? 'Quitar Jefatura de Enfermería' : 'Dar Jefatura de Enfermería'}
+                variante="secundario"
+                alHacer={marcarJefatura.bind(null, id, !u.jefatura_enfermeria)}
+              />
+            </section>
+          )}
           <section className={claseTarjeta}>
             <AccionesCuenta
               activo={u.activo as boolean}

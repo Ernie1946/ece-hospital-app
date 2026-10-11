@@ -12,6 +12,7 @@ const SECCIONES = [
   { href: '/anestesia', clave: 'anestesia', nombre: 'Anestesia' },
   { href: '/farmacia', clave: 'farmacia', nombre: 'Farmacia' },
   { href: '/resultados', clave: 'resultados', nombre: 'Resultados' },
+  { href: '/hemodialisis', clave: 'hemodialisis', nombre: 'Hemodiálisis' },
   { href: '/personal', clave: 'personal', nombre: 'Personal' },
 ] as const
 
@@ -27,7 +28,8 @@ export function Encabezado({
   const secciones = SECCIONES.filter(
     (s) =>
       (s.clave !== 'personal' || perfil.rol === 'admin_sistema') &&
-      (s.clave !== 'resultados' || ['laboratorio', 'imagenologia', 'admision', 'archivo'].includes(perfil.rol))
+      (s.clave !== 'resultados' || ['laboratorio', 'imagenologia', 'admision', 'archivo'].includes(perfil.rol)) &&
+      (s.clave !== 'hemodialisis' || !!perfil.hd)
   )
   return (
     <header className="bg-white border-b border-slate-200 print:hidden">

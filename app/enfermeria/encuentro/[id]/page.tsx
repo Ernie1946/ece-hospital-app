@@ -38,6 +38,7 @@ import { BotonAccion } from '@/components/BotonAccion'
 import { AdministrarDosis } from '@/components/AdministrarDosis'
 import { ESTADO_DOSIS, cantidad, horaCorta } from '@/lib/farmacia'
 import { PlanCuidados } from '@/components/PlanCuidados'
+import { ListaResultados } from '@/components/ListaResultados'
 import { sugerencias, type DiagnosticoEnf, type EvaluacionPlan, type PlanCuidado } from '@/lib/cuidados'
 import { cerrarPlanCuidado, crearPlanCuidado, evaluarPlanCuidado } from '../../acciones'
 import { NOMBRE_NOTA, PRIORIDADES, TIPOS_NOTA_MEDICA, TITULOS_CAMPOS, TIPO_ORDEN, estadoOrden, idsDuplicadas } from '@/lib/medica'
@@ -385,6 +386,8 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
                   <p className="mt-1 text-sm text-slate-500">Sin notas médicas.</p>
                 )}
               </section>
+
+              <ListaResultados encuentroId={id} />
 
               {/* Órdenes médicas */}
               <section className={claseTarjeta}>

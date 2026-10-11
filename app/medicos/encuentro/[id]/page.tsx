@@ -6,6 +6,7 @@ import { Encabezado } from '@/components/Encabezado'
 import { SinAlta } from '@/components/SinAlta'
 import { FormAccion } from '@/components/FormAccion'
 import { FormNotaMedica } from '@/components/FormNotaMedica'
+import { ListaResultados } from '@/components/ListaResultados'
 import { claseCampo, claseEtiqueta, claseTarjeta } from '@/lib/estilos'
 import { ahora, edad, fechaHora, nombreCompleto } from '@/lib/formato'
 import { NOMBRE_NOTA, PRIORIDADES, TIPO_DIAGNOSTICO, TIPO_ORDEN, TIPOS_NOTA_MEDICA, TITULOS_CAMPOS, esMedico, estadoOrden, idsDuplicadas } from '@/lib/medica'
@@ -222,6 +223,8 @@ export default async function ExpedienteMedicoPage({ params }: PageProps<'/medic
                         : 'Vista de consulta: las notas las escribe el personal médico.'}
                   </p>
                 )}
+
+                <ListaResultados encuentroId={id} />
 
                 {/* Notas */}
                 <section className={claseTarjeta}>

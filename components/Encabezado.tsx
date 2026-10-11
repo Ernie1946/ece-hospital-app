@@ -11,6 +11,7 @@ const SECCIONES = [
   { href: '/enfermeria', clave: 'enfermeria', nombre: 'Enfermería' },
   { href: '/anestesia', clave: 'anestesia', nombre: 'Anestesia' },
   { href: '/farmacia', clave: 'farmacia', nombre: 'Farmacia' },
+  { href: '/resultados', clave: 'resultados', nombre: 'Resultados' },
   { href: '/personal', clave: 'personal', nombre: 'Personal' },
 ] as const
 
@@ -23,7 +24,11 @@ export function Encabezado({
 }) {
   // Contraseña temporal: hay que cambiarla antes de usar el expediente
   if (perfil.debe_cambiar_contrasena) redirect('/cuenta/contrasena')
-  const secciones = SECCIONES.filter((s) => s.clave !== 'personal' || perfil.rol === 'admin_sistema')
+  const secciones = SECCIONES.filter(
+    (s) =>
+      (s.clave !== 'personal' || perfil.rol === 'admin_sistema') &&
+      (s.clave !== 'resultados' || ['laboratorio', 'imagenologia', 'admision', 'archivo'].includes(perfil.rol))
+  )
   return (
     <header className="bg-white border-b border-slate-200 print:hidden">
       <div className="max-w-7xl mx-auto px-4 py-2 flex flex-wrap items-center justify-between gap-3">

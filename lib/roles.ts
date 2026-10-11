@@ -6,6 +6,7 @@ export const ETIQUETA_ROL: Record<string, string> = {
   enfermeria: 'Enfermería',
   farmacia: 'Farmacia',
   laboratorio: 'Laboratorio',
+  imagenologia: 'Imagenología',
   banco_sangre: 'Banco de sangre',
   nutricion: 'Nutrición',
   trabajo_social: 'Trabajo social',

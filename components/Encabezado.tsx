@@ -13,6 +13,7 @@ const SECCIONES = [
   { href: '/farmacia', clave: 'farmacia', nombre: 'Farmacia' },
   { href: '/resultados', clave: 'resultados', nombre: 'Resultados' },
   { href: '/hemodialisis', clave: 'hemodialisis', nombre: 'Hemodiálisis' },
+  { href: '/gabinetes', clave: 'gabinetes', nombre: 'Gabinetes' },
   { href: '/personal', clave: 'personal', nombre: 'Personal' },
 ] as const
 
@@ -27,9 +28,12 @@ export function Encabezado({
   if (perfil.debe_cambiar_contrasena) redirect('/cuenta/contrasena')
   const secciones = SECCIONES.filter(
     (s) =>
+      // El técnico de gabinete solo trabaja en su agenda
+      (perfil.rol !== 'gabinete' || s.clave === 'gabinetes') &&
       (s.clave !== 'personal' || perfil.rol === 'admin_sistema') &&
       (s.clave !== 'resultados' || ['laboratorio', 'imagenologia', 'admision', 'archivo'].includes(perfil.rol)) &&
-      (s.clave !== 'hemodialisis' || !!perfil.hd)
+      (s.clave !== 'hemodialisis' || !!perfil.hd) &&
+      (s.clave !== 'gabinetes' || !!perfil.gabinete || ['admision', 'archivo'].includes(perfil.rol))
   )
   return (
     <header className="bg-white border-b border-slate-200 print:hidden">

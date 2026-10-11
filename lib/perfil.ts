@@ -13,6 +13,7 @@ export type Perfil = {
   debe_cambiar_contrasena: boolean
   jefatura_enfermeria: boolean
   hd: string | null // papel en la unidad de hemodiálisis: medico | enfermeria | consulta
+  gabinete: number | null // área del gabinete donde trabaja (ECG, neurología…)
 }
 
 // Usuario de la sesión + su perfil clínico (seguridad.usuario).
@@ -31,8 +32,14 @@ export const obtenerPerfil = cache(async (): Promise<{ perfil: Perfil | null; em
     .maybeSingle()
 
   if (!data) return { perfil: null, email: auth.user.email }
-  const { data: hd } = await supabase.schema('clinico').rpc('hd_rol')
-  return { perfil: { id: auth.user.id, email: auth.user.email, ...data, hd: (hd as string | null) ?? null }, email: auth.user.email }
+  const [{ data: hd }, { data: gab }] = await Promise.all([
+    supabase.schema('clinico').rpc('hd_rol'),
+    supabase.schema('clinico').rpc('gab_area_usuario'),
+  ])
+  return {
+    perfil: { id: auth.user.id, email: auth.user.email, ...data, hd: (hd as string | null) ?? null, gabinete: (gab as number | null) ?? null },
+    email: auth.user.email,
+  }
 })
 
 export const esSistemas = (perfil: Perfil) => perfil.rol === 'admin_sistema'

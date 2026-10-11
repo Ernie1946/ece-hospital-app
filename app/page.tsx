@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { obtenerPerfil } from '@/lib/perfil'
 import { Encabezado } from '@/components/Encabezado'
@@ -71,6 +72,8 @@ export default async function CensoPage({ searchParams }: PageProps<'/'>) {
 
   const { perfil, email } = await obtenerPerfil()
   if (!perfil) return <SinAlta email={email} />
+  // El técnico de gabinete trabaja en su agenda
+  if (perfil.rol === 'gabinete') redirect('/gabinetes')
 
   const supabase = await crearClienteServidor()
 

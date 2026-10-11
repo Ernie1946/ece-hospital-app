@@ -3,7 +3,7 @@ import { claseTarjeta } from '@/lib/estilos'
 import { fecha, fechaHora } from '@/lib/formato'
 import { COLUMNAS_RESULTADO, TIPO_RESULTADO, type Resultado } from '@/lib/resultados'
 
-// Resultados de laboratorio e imagen del ingreso, en el expediente (médicos y enfermería)
+// Resultados de laboratorio, imagen y gabinete del ingreso, en el expediente (médicos y enfermería)
 export async function ListaResultados({ encuentroId }: { encuentroId: string }) {
   const supabase = await crearClienteServidor()
   const { data } = await supabase
@@ -18,8 +18,8 @@ export async function ListaResultados({ encuentroId }: { encuentroId: string }) 
   const criticosNuevos = lista.filter((r) => r.critico && !r.visto_en)
 
   return (
-    <section className={claseTarjeta} aria-label="Resultados de laboratorio e imagen">
-      <h2 className="text-sm font-semibold text-slate-800">Resultados de laboratorio e imagen ({lista.length})</h2>
+    <section className={claseTarjeta} aria-label="Resultados de laboratorio, imagen y gabinete">
+      <h2 className="text-sm font-semibold text-slate-800">Resultados de laboratorio, imagen y gabinete ({lista.length})</h2>
       {criticosNuevos.length > 0 && (
         <p role="alert" className="mt-2 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm font-medium text-red-800">
           ⚠ {criticosNuevos.length} resultado(s) con valores críticos sin revisar por el médico: {criticosNuevos.map((r) => r.estudio).join(', ')}

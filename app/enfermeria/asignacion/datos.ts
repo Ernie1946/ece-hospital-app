@@ -8,7 +8,7 @@ export async function datosAsignacion(sp: Record<string, string | string[] | und
   const [{ data: turnosData }, { data: actualData }, { data: areasData }] = await Promise.all([
     supabase.schema('catalogo').from('turno').select('id, clave, nombre, inicio, fin').eq('activo', true).order('orden'),
     supabase.schema('catalogo').rpc('turno_actual'),
-    supabase.schema('catalogo').from('area').select('id, clave, nombre, tipo, censable, padre_id, orden').eq('activo', true),
+    supabase.schema('catalogo').from('area').select('id, clave, nombre, tipo, censable, padre_id, orden').eq('activo', true).eq('es_gabinete', false),
   ])
   const turnos = (turnosData ?? []) as Turno[]
   const actual = ((actualData ?? []) as TurnoActual[])[0] ?? null

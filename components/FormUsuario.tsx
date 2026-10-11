@@ -105,7 +105,7 @@ export function FormUsuario({
             <input name="vigencia_hasta" type="date" required={CON_VIGENCIA.includes(vinculo)} defaultValue={inicial?.vigencia_hasta ?? ''} className={claseCampo} />
           </label>
           <label className={claseEtiqueta}>
-            Área base (enfermería)
+            Área base (enfermería o gabinete)
             <select name="area" defaultValue={inicial?.area ?? ''} className={claseCampo}>
               <option value="">Sin área</option>
               {areas.map((a) => (

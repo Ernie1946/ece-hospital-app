@@ -7,6 +7,7 @@ import { SinAlta } from '@/components/SinAlta'
 import { FormAccion } from '@/components/FormAccion'
 import { FormNotaMedica } from '@/components/FormNotaMedica'
 import { ListaResultados } from '@/components/ListaResultados'
+import { ListaHemodinamia } from '@/components/ListaHemodinamia'
 import { claseCampo, claseEtiqueta, claseTarjeta } from '@/lib/estilos'
 import { ahora, edad, fechaHora, nombreCompleto } from '@/lib/formato'
 import { NOMBRE_NOTA, PRIORIDADES, TIPO_DIAGNOSTICO, TIPO_ORDEN, TIPOS_NOTA_MEDICA, TITULOS_CAMPOS, esMedico, estadoOrden, idsDuplicadas } from '@/lib/medica'
@@ -225,6 +226,7 @@ export default async function ExpedienteMedicoPage({ params }: PageProps<'/medic
                 )}
 
                 <ListaResultados encuentroId={id} />
+                <ListaHemodinamia encuentroId={id} />
 
                 {/* Notas */}
                 <section className={claseTarjeta}>

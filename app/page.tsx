@@ -73,7 +73,7 @@ export default async function CensoPage({ searchParams }: PageProps<'/'>) {
   const { perfil, email } = await obtenerPerfil()
   if (!perfil) return <SinAlta email={email} />
   // El técnico de gabinete trabaja en su agenda
-  if (perfil.rol === 'gabinete') redirect('/gabinetes')
+  if (perfil.rol === 'gabinete') redirect(perfil.hemo ? '/hemodinamia' : '/gabinetes')
 
   const supabase = await crearClienteServidor()
 

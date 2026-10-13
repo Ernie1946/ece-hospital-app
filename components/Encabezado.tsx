@@ -14,6 +14,7 @@ const SECCIONES = [
   { href: '/resultados', clave: 'resultados', nombre: 'Resultados' },
   { href: '/hemodialisis', clave: 'hemodialisis', nombre: 'Hemodiálisis' },
   { href: '/gabinetes', clave: 'gabinetes', nombre: 'Gabinetes' },
+  { href: '/hemodinamia', clave: 'hemodinamia', nombre: 'Hemodinamia' },
   { href: '/personal', clave: 'personal', nombre: 'Personal' },
 ] as const
 
@@ -29,7 +30,8 @@ export function Encabezado({
   const secciones = SECCIONES.filter(
     (s) =>
       // El técnico de gabinete solo trabaja en su agenda
-      (perfil.rol !== 'gabinete' || s.clave === 'gabinetes') &&
+      (perfil.rol !== 'gabinete' || s.clave === 'gabinetes' || s.clave === 'hemodinamia') &&
+      (s.clave !== 'hemodinamia' || !!perfil.hemo) &&
       (s.clave !== 'personal' || perfil.rol === 'admin_sistema') &&
       (s.clave !== 'resultados' || ['laboratorio', 'imagenologia', 'admision', 'archivo'].includes(perfil.rol)) &&
       (s.clave !== 'hemodialisis' || !!perfil.hd) &&

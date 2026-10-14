@@ -13,7 +13,8 @@ export type Perfil = {
   debe_cambiar_contrasena: boolean
   jefatura_enfermeria: boolean
   hd: string | null // papel en la unidad de hemodiálisis: medico | enfermeria | consulta
-  gabinete: number | null // área del gabinete donde trabaja (ECG, neurología…)
+  gabinetes: number[] // gabinetes donde trabaja (técnico por su área; médico por sus privilegios)
+  privilegios: string[] // privilegios clínicos vigentes (credencialización)
   hemo: string | null // papel en hemodinamia: medico | enfermeria | tecnico | anestesia | consulta
 }
 
@@ -33,13 +34,15 @@ export const obtenerPerfil = cache(async (): Promise<{ perfil: Perfil | null; em
     .maybeSingle()
 
   if (!data) return { perfil: null, email: auth.user.email }
-  const [{ data: hd }, { data: gab }, { data: hemo }] = await Promise.all([
+  const [{ data: hd }, { data: gab }, { data: hemo }, { data: priv }] = await Promise.all([
     supabase.schema('clinico').rpc('hd_rol'),
-    supabase.schema('clinico').rpc('gab_area_usuario'),
+    supabase.schema('clinico').rpc('gab_areas_usuario'),
     supabase.schema('clinico').rpc('hemo_rol'),
+    supabase.schema('seguridad').rpc('mis_privilegios'),
   ])
   return {
-    perfil: { id: auth.user.id, email: auth.user.email, ...data, hd: (hd as string | null) ?? null, gabinete: (gab as number | null) ?? null, hemo: (hemo as string | null) ?? null },
+    perfil: { id: auth.user.id, email: auth.user.email, ...data, hd: (hd as string | null) ?? null, gabinetes: ((gab as number[] | null) ?? []).map(Number),
+      privilegios: (priv as string[] | null) ?? [], hemo: (hemo as string | null) ?? null },
     email: auth.user.email,
   }
 })

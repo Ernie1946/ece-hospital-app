@@ -30,7 +30,7 @@ export default async function AgendarGabinetePage({ searchParams }: PageProps<'/
     .maybeSingle()
   const gab = g as Gabinete | null
   if (!gab || !/^[0-9a-f-]{36}$/.test(pacienteId)) notFound()
-  if (perfil.rol !== 'admision' && perfil.gabinete !== gab.id) notFound()
+  if (perfil.rol !== 'admision' && !perfil.gabinetes.includes(gab.id)) notFound()
 
   const [{ data: p }, { data: eq }, { data: es }, { data: ords }, { data: cit }] = await Promise.all([
     supabase.schema('clinico').from('paciente').select('id, expediente, nombre, primer_apellido, segundo_apellido, sexo, fecha_nacimiento, telefono').eq('id', pacienteId).maybeSingle(),

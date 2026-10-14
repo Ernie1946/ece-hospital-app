@@ -116,7 +116,7 @@ export function FormUsuario({
             </select>
           </label>
           <label className={claseEtiqueta}>
-            Servicio (médicos)
+            Servicio clínico (opcional: ve a todos los pacientes de ese servicio)
             <select name="servicio" defaultValue={inicial?.servicio ?? ''} className={claseCampo}>
               <option value="">Sin servicio</option>
               {servicios.map((s) => (

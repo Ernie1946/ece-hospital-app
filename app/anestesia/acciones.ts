@@ -67,6 +67,7 @@ export async function programarCirugia(_previo: Resultado, datos: FormData): Pro
     p_anestesiologo: texto(datos, 'anestesiologo'),
     p_tecnica: texto(datos, 'tecnica'),
     p_observaciones: texto(datos, 'observaciones'),
+    p_justificacion: texto(datos, 'justificacion'),
   })
   if (error) return { error: traducirError(error.message) }
   refrescar()

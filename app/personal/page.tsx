@@ -92,6 +92,9 @@ export default async function PersonalPage({ searchParams }: PageProps<'/persona
               <Link href="/personal/importar" className="rounded-lg border border-sky-700 bg-white px-3 py-1.5 font-medium text-sky-800 hover:bg-sky-50">
                 Alta y cambios desde Excel
               </Link>
+              <Link href="/personal/privilegios" className="rounded-lg border border-sky-700 bg-white px-3 py-1.5 font-medium text-sky-800 hover:bg-sky-50">
+                Privilegios médicos
+              </Link>
             </div>
           </div>
 

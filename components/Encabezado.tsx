@@ -35,7 +35,7 @@ export function Encabezado({
       (s.clave !== 'personal' || perfil.rol === 'admin_sistema') &&
       (s.clave !== 'resultados' || ['laboratorio', 'imagenologia', 'admision', 'archivo'].includes(perfil.rol)) &&
       (s.clave !== 'hemodialisis' || !!perfil.hd) &&
-      (s.clave !== 'gabinetes' || !!perfil.gabinete || ['admision', 'archivo'].includes(perfil.rol))
+      (s.clave !== 'gabinetes' || perfil.gabinetes.length > 0 || ['admision', 'archivo'].includes(perfil.rol))
   )
   return (
     <header className="bg-white border-b border-slate-200 print:hidden">
@@ -64,6 +64,11 @@ export function Encabezado({
               {etiquetaRol(perfil.rol)}
             </span>
           </span>
+          {['medico_tratante', 'anestesiologo'].includes(perfil.rol) && (
+            <Link href="/cuenta/privilegios" className="text-slate-600 hover:underline">
+              Mis privilegios
+            </Link>
+          )}
           <Link href="/cuenta/contrasena" className="text-slate-600 hover:underline">
             Contraseña
           </Link>

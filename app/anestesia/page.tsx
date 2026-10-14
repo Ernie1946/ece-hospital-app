@@ -77,10 +77,10 @@ export default async function AnestesiaPage({ searchParams }: PageProps<'/aneste
 
   // Datos para programar
   let pacientes: { id: string; texto: string }[] = []
-  let cirujanos: { id: string; texto: string }[] = []
+  let cirujanos: { id: string; texto: string; rangos?: string[] }[] = []
   let anestesiologos: { id: string; texto: string }[] = []
   if (puedeProgramar) {
-    const [enc, medicos] = await Promise.all([
+    const [enc, medicos, qx, catQx] = await Promise.all([
       supabase
         .schema('clinico')
         .from('encuentro')
@@ -96,6 +96,8 @@ export default async function AnestesiaPage({ searchParams }: PageProps<'/aneste
         .in('rol', ['medico_tratante', 'medico_residente', 'anestesiologo'])
         .eq('activo', true)
         .order('primer_apellido'),
+      supabase.schema('seguridad').rpc('medicos_con_privilegio', { p_grupo: 'quirurgico' }),
+      supabase.schema('catalogo').from('privilegio').select('clave, cie9_rangos').eq('grupo', 'quirurgico'),
     ])
     pacientes = ((enc.data ?? []) as unknown as {
       id: string
@@ -111,9 +113,13 @@ export default async function AnestesiaPage({ searchParams }: PageProps<'/aneste
       }))
       .sort((a, b) => a.texto.localeCompare(b.texto, 'es'))
     const ms = (medicos.data ?? []) as { id: string; nombre: string; primer_apellido: string; rol: string; especialidad: string | null }[]
-    cirujanos = ms
-      .filter((m) => m.rol !== 'anestesiologo')
-      .map((m) => ({ id: m.id, texto: `Dr(a). ${m.nombre} ${m.primer_apellido}${m.especialidad ? ` · ${m.especialidad}` : ''}` }))
+    // Cirujanos: solo médicos del staff con privilegios quirúrgicos vigentes
+    const rangos = new Map(((catQx.data ?? []) as { clave: string; cie9_rangos: string | null }[]).map((c) => [c.clave, c.cie9_rangos ?? '']))
+    cirujanos = ((qx.data ?? []) as { id: string; nombre: string; privilegios: string[]; nombres: string[] }[]).map((m) => ({
+      id: m.id,
+      texto: `Dr(a). ${m.nombre} · ${m.nombres.join(', ')}`,
+      rangos: m.privilegios.map((k) => rangos.get(k) ?? ''),
+    }))
     anestesiologos = ms.filter((m) => m.rol === 'anestesiologo').map((m) => ({ id: m.id, texto: `Dr(a). ${m.nombre} ${m.primer_apellido}` }))
   }
 

@@ -4,8 +4,9 @@ import { useEffect, useState } from 'react'
 import { FormAccion, type Resultado } from '@/components/FormAccion'
 import { claseCampo, claseEtiqueta } from '@/lib/estilos'
 import { TECNICAS } from '@/lib/anestesia'
+import { cie9EnRangos } from '@/lib/privilegios'
 
-type Opcion = { id: string; texto: string }
+type Opcion = { id: string; texto: string; rangos?: string[] }
 type Procedimiento = { codigo: string; descripcion: string; tipo: string | null }
 
 // Programación de una cirugía: paciente (ingreso vigente), procedimiento con
@@ -32,6 +33,8 @@ export function FormProgramarCirugia({
   const [consulta, setConsulta] = useState('')
   const [resultados, setResultados] = useState<Procedimiento[]>([])
   const [elegido, setElegido] = useState<Procedimiento | null>(null)
+  const [tipo, setTipo] = useState('programada')
+  const conPrivilegio = (c: Opcion) => !elegido || (c.rangos ?? []).some((r) => cie9EnRangos(elegido.codigo, r))
 
   useEffect(() => {
     const q = consulta.trim()
@@ -78,7 +81,11 @@ export function FormProgramarCirugia({
           />
         </label>
         <input type="hidden" name="cie9mc" value={elegido?.codigo ?? ''} />
-        {elegido && <p className="mt-1 text-xs text-slate-600">CIE-9-MC {elegido.codigo}</p>}
+        {elegido ? (
+          <p className="mt-1 text-xs text-slate-600">CIE-9-MC {elegido.codigo}</p>
+        ) : (
+          <p className="mt-1 text-xs text-slate-500">Elige el procedimiento de la lista CIE-9-MC: con él se revisan los privilegios quirúrgicos del cirujano.</p>
+        )}
         {!elegido && consulta.trim().length >= 2 && resultados.length > 0 && (
           <ul aria-label="Procedimientos CIE-9-MC" className="mt-1 max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white text-sm">
             {resultados.map((r) => (
@@ -121,7 +128,7 @@ export function FormProgramarCirugia({
         </label>
         <label className={claseEtiqueta}>
           Tipo
-          <select name="tipo" defaultValue="programada" className={claseCampo}>
+          <select name="tipo" value={tipo} onChange={(e) => setTipo(e.target.value)} className={claseCampo}>
             <option value="programada">Programada</option>
             <option value="urgencia">Urgencia</option>
           </select>
@@ -133,12 +140,18 @@ export function FormProgramarCirugia({
           Cirujano *
           <select name="cirujano" required defaultValue="" className={claseCampo}>
             <option value="">Elige…</option>
-            {cirujanos.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.texto}
-              </option>
-            ))}
+            {cirujanos
+              .filter((c) => conPrivilegio(c) || tipo === 'urgencia')
+              .map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.texto}
+                  {conPrivilegio(c) ? '' : ' — SIN PRIVILEGIO para este procedimiento'}
+                </option>
+              ))}
           </select>
+          {elegido && cirujanos.filter(conPrivilegio).length === 0 && (
+            <span className="mt-1 block text-xs text-red-700">Ningún cirujano tiene privilegio para este procedimiento.</span>
+          )}
         </label>
         <label className={claseEtiqueta}>
           Anestesiólogo
@@ -152,6 +165,14 @@ export function FormProgramarCirugia({
           </select>
         </label>
       </div>
+
+      {tipo === 'urgencia' && (
+        <label className={claseEtiqueta}>
+          Justificación si el cirujano opera fuera de sus privilegios (solo urgencia)
+          <input name="justificacion" placeholder="Urgencia vital, no hay cirujano con privilegio disponible…" className={claseCampo} />
+          <span className="mt-1 block text-xs text-amber-800">Queda reportada a Dirección Médica.</span>
+        </label>
+      )}
 
       <div className="grid sm:grid-cols-2 gap-2">
         <label className={claseEtiqueta}>

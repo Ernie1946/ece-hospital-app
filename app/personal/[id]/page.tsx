@@ -13,6 +13,7 @@ import { ESTADO_CUENTA, SOLICITANTES } from '@/lib/personal'
 import { cambiarEstado, guardarUsuario, marcarJefatura, restablecerContrasena } from '../acciones'
 import { BotonAccion } from '@/components/BotonAccion'
 import { opcionesPersonal } from '../opciones'
+import { PrivilegiosMedico } from '@/components/PrivilegiosMedico'
 
 export default async function UsuarioPage({ params }: PageProps<'/personal/[id]'>) {
   const { perfil, email } = await obtenerPerfil()
@@ -77,6 +78,9 @@ export default async function UsuarioPage({ params }: PageProps<'/personal/[id]'
             <h2 className="mb-2 text-sm font-semibold text-slate-800 print:hidden">Datos</h2>
             <FormUsuario accion={guardarUsuario.bind(null, true)} inicial={inicial} areas={areas} servicios={servicios} />
           </section>
+          {['medico_tratante', 'medico_residente', 'anestesiologo'].includes(u.rol as string) && u.activo && (
+            <PrivilegiosMedico usuarioId={id} rol={u.rol as string} />
+          )}
           {u.rol === 'enfermeria' && u.activo && (
             <section className={`${claseTarjeta} space-y-2 text-sm print:hidden`}>
               <h2 className="font-semibold text-slate-800">Jefatura de Enfermería</h2>

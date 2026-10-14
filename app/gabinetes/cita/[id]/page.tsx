@@ -23,7 +23,7 @@ export default async function CitaGabinetePage({ params }: PageProps<'/gabinetes
   const { data } = await supabase.schema('clinico').from('v_gab_cita').select('*').eq('id', id).maybeSingle()
   const c = data as Cita | null
   if (!c) notFound()
-  const staff = perfil.gabinete === c.area_id
+  const staff = perfil.gabinetes.includes(c.area_id)
   const admision = perfil.rol === 'admision'
   const [{ data: pac }, { data: res }] = await Promise.all([
     supabase.schema('clinico').from('paciente').select('sexo, fecha_nacimiento').eq('id', c.paciente_id).maybeSingle(),

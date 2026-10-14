@@ -22,7 +22,7 @@ export default async function GabinetesPage({ searchParams }: PageProps<'/gabine
   const { perfil, email } = await obtenerPerfil()
   if (!perfil) return <SinAlta email={email} />
   const admision = perfil.rol === 'admision'
-  if (!perfil.gabinete && !admision && perfil.rol !== 'archivo')
+  if (!perfil.gabinetes.length && !admision && perfil.rol !== 'archivo')
     return (
       <>
         <Encabezado perfil={perfil} activo="gabinetes" />
@@ -39,7 +39,7 @@ export default async function GabinetesPage({ searchParams }: PageProps<'/gabine
   const supabase = await crearClienteServidor()
 
   const { data: gabs } = await supabase.schema('catalogo').from('area').select('id, clave, nombre').eq('es_gabinete', true).eq('activo', true).order('orden')
-  const gabinetes = ((gabs ?? []) as Gabinete[]).filter((g) => !perfil.gabinete || g.id === perfil.gabinete)
+  const gabinetes = ((gabs ?? []) as Gabinete[]).filter((g) => admision || perfil.rol === 'archivo' || perfil.gabinetes.includes(g.id))
   const gab = gabinetes.find((g) => g.clave === sp.g) ?? gabinetes[0]
   if (!gab)
     return (
@@ -50,7 +50,7 @@ export default async function GabinetesPage({ searchParams }: PageProps<'/gabine
         </main>
       </>
     )
-  const puedeAgendar = admision || perfil.gabinete === gab.id
+  const puedeAgendar = admision || perfil.gabinetes.includes(gab.id)
 
   const t = busqueda.replace(/[%,()_]/g, ' ')
   const patron = t

@@ -139,7 +139,7 @@ export function FormUsuario({
             <input name="cedula_especialidad" defaultValue={inicial?.cedula_especialidad ?? ''} className={claseCampo} />
           </label>
           <label className={claseEtiqueta}>
-            Correo (opcional)
+            Correo (opcional: con él puede recuperar su contraseña)
             <input name="correo" type="email" defaultValue={inicial?.correo ?? ''} placeholder="nombre@hospital.mx" className={claseCampo} />
           </label>
           <label className={claseEtiqueta}>

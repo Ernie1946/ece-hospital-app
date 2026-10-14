@@ -127,7 +127,7 @@ export function ImportarPrivilegios({ privilegios, especialidades }: { privilegi
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <a href="/plantilla-privilegios.xlsx" download className="rounded-lg border border-sky-700 px-3 py-1.5 text-sm font-medium text-sky-800 hover:bg-sky-50">
+        <a href="/personal/privilegios/plantilla" download="plantilla-privilegios.xlsx" className="rounded-lg border border-sky-700 px-3 py-1.5 text-sm font-medium text-sky-800 hover:bg-sky-50">
           Descargar plantilla de Excel
         </a>
         <label className="text-sm font-medium text-slate-700">

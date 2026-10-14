@@ -93,3 +93,23 @@ export async function procesarEspecialidades(filas: FilaEspecialidad[], aplicar:
   if (aplicar) revalidatePath('/personal/privilegios')
   return { resultado: data as RevisionFila[] }
 }
+
+// ---------------------------------------------------------------------
+// Catálogo de privilegios (lo que aprobó el comité)
+// ---------------------------------------------------------------------
+export async function guardarPrivilegioCatalogo(claveExistente: string | null, _p: Resultado, d: FormData): Promise<Resultado> {
+  const { data, error } = await (await db()).rpc('guardar_privilegio_catalogo', {
+    p_clave: claveExistente ?? t(d, 'clave'),
+    p_nombre: t(d, 'nombre'),
+    p_grupo: t(d, 'grupo'),
+    p_area_clave: t(d, 'area_clave'),
+    p_hemo_categoria: t(d, 'hemo_categoria'),
+    p_cie9_rangos: t(d, 'cie9_rangos'),
+    p_descripcion: t(d, 'descripcion'),
+    p_activo: d.get('activo') === 'on',
+    p_acta: t(d, 'acta'),
+  })
+  if (error) return { error: traducirError(error.message) }
+  revalidatePath('/personal/privilegios', 'layout')
+  return { ok: claveExistente ? `Privilegio ${data} actualizado.` : `Privilegio ${data} agregado al catálogo.` }
+}

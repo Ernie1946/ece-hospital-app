@@ -6,7 +6,17 @@ import { useRouter } from 'next/navigation'
 import { crearClienteNavegador } from '@/lib/supabase/client'
 import { claseCampo, claseEtiqueta } from '@/lib/estilos'
 
-export function CambiarContrasena({ nombre, usuario, obligatoria }: { nombre: string; usuario: string; obligatoria: boolean }) {
+export function CambiarContrasena({
+  nombre,
+  usuario,
+  obligatoria,
+  recuperacion = false,
+}: {
+  nombre: string
+  usuario: string
+  obligatoria: boolean
+  recuperacion?: boolean
+}) {
   const router = useRouter()
   const [nueva, setNueva] = useState('')
   const [repetir, setRepetir] = useState('')
@@ -35,11 +45,14 @@ export function CambiarContrasena({ nombre, usuario, obligatoria }: { nombre: st
   return (
     <form onSubmit={guardar} className="w-full max-w-sm space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
       <div>
-        <h1 className="text-xl font-semibold text-slate-900">{obligatoria ? 'Crea tu contraseña' : 'Cambiar contraseña'}</h1>
+        <h1 className="text-xl font-semibold text-slate-900">{recuperacion ? 'Crea tu contraseña nueva' : obligatoria ? 'Crea tu contraseña' : 'Cambiar contraseña'}</h1>
         <p className="text-sm text-slate-500">
           {nombre} · usuario <span className="font-mono">{usuario}</span>
         </p>
-        {obligatoria && (
+        {recuperacion && (
+          <p className="mt-2 rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-900">Abriste el enlace de recuperación. Escribe tu contraseña nueva.</p>
+        )}
+        {obligatoria && !recuperacion && (
           <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
             Entraste con una contraseña temporal. Antes de continuar, crea una propia: solo tú debes conocerla.
           </p>

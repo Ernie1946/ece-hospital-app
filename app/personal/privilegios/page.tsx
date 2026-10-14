@@ -47,6 +47,9 @@ export default async function PadronPrivilegiosPage() {
               <p className="text-xs text-slate-500">Impreso {fechaHora(new Date().toISOString())}</p>
             </div>
             <span className="flex items-center gap-2 print:hidden">
+              <Link href="/personal/privilegios/catalogo" className="rounded-lg border border-sky-700 bg-white px-3 py-2 text-sm font-medium text-sky-800 hover:bg-sky-50">
+                Catálogo de privilegios
+              </Link>
               <Link href="/personal/privilegios/importar" className="rounded-lg border border-sky-700 bg-white px-3 py-2 text-sm font-medium text-sky-800 hover:bg-sky-50">
                 Cargar desde Excel
               </Link>

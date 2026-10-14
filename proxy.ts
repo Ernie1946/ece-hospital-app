@@ -34,6 +34,8 @@ export async function proxy(request: NextRequest) {
   const esLogin = ruta.startsWith('/login')
   // Resultados para pacientes externos: página pública (la protege el enlace + fecha de nacimiento)
   if (ruta.startsWith('/r/')) return response
+  // Recuperación de contraseña: se pide y se confirma sin sesión
+  if (ruta.startsWith('/recuperar') || ruta.startsWith('/auth/')) return response
 
   if (!conSesion && !esLogin) {
     return redirigir(request, response, '/login')

@@ -1,9 +1,12 @@
 // =====================================================================
 // Función de servidor "personal" (Supabase Edge Function)
-//   Crea las cuentas de acceso del personal y restablece contraseñas.
+//   Crea las cuentas de acceso del personal y restablece contraseñas
+//   (solo Sistemas, admin_sistema), y envía el enlace de "¿Olvidaste tu
+//   contraseña?" a quien tiene correo registrado (acción pública).
 //   Usa la llave maestra de Supabase, que existe solo aquí dentro
 //   (Supabase la pone sola; nunca va en la app ni en Netlify).
-//   Solo la puede usar una persona con rol de Sistemas (admin_sistema).
+//   Secretos (Edge Functions → Secrets): RESEND_API_KEY, CORREO_REMITENTE
+//   y SITIO_URL (dirección del ECE, p. ej. https://ece-hospital.netlify.app).
 //
 //   Se publica en Supabase: Edge Functions → Deploy a new function →
 //   Via Editor → nombre "personal" → pegar este archivo → Deploy.
@@ -38,6 +41,41 @@ Deno.serve(async (req) => {
     const llave = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
     if (!llave) return responder(500, { error: 'La función no tiene acceso a la llave de servicio de Supabase.' })
     const admin = createClient(url, llave, { auth: { persistSession: false, autoRefreshToken: false } })
+    const cuerpo = await req.json()
+
+    // ¿Olvidaste tu contraseña? { accion: 'recuperar', identificador: 'usuario o correo' }
+    // Siempre responde lo mismo (no revela si la cuenta existe o tiene correo).
+    if (cuerpo.accion === 'recuperar') {
+      const generico = { ok: true }
+      // IP de quien lo pide (la manda la app; si no, la de la conexión)
+      const ip = (req.headers.get('x-ip-cliente') || (req.headers.get('x-forwarded-for') ?? '').split(',')[0]).trim().slice(0, 60) || 'desconocida'
+      const { data: filas, error: e0 } = await admin
+        .schema('seguridad')
+        .rpc('preparar_recuperacion', { p_identificador: String(cuerpo.identificador ?? ''), p_ip: ip })
+      if (e0) return responder(500, { error: e0.message })
+      const fila = (filas as { usuario_id: string; correo: string; correo_acceso: string; nombre: string }[] | null)?.[0]
+      if (!fila) return responder(200, generico)
+      const sitio = (Deno.env.get('SITIO_URL') ?? '').replace(/\/+$/, '')
+      const resend = Deno.env.get('RESEND_API_KEY')
+      const remitente = Deno.env.get('CORREO_REMITENTE')
+      if (!sitio || !resend || !remitente) return responder(500, { error: 'Falta configurar el envío de correos (SITIO_URL, RESEND_API_KEY, CORREO_REMITENTE).' })
+      const { data: liga, error: e1 } = await admin.auth.admin.generateLink({ type: 'recovery', email: fila.correo_acceso })
+      if (e1 || !liga?.properties?.hashed_token) return responder(500, { error: e1?.message ?? 'No se pudo generar el enlace' })
+      const enlace = `${sitio}/auth/confirmar?type=recovery&token_hash=${encodeURIComponent(liga.properties.hashed_token)}`
+      const html = `<div style="font-family:Arial,sans-serif;font-size:15px;color:#0f172a;max-width:520px">
+        <p>Hola ${fila.nombre.replace(/[<>&]/g, '')}:</p>
+        <p>Recibimos una solicitud para restablecer tu contraseña del Expediente Clínico Electrónico.</p>
+        <p><a href="${enlace}" style="display:inline-block;background:#0369a1;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">Crear contraseña nueva</a></p>
+        <p style="font-size:13px;color:#475569">El enlace sirve una sola vez y vence en una hora. Si tú no lo pediste, ignora este correo: tu contraseña no cambia.</p>
+      </div>`
+      const envio = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${resend}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: remitente, to: [fila.correo], subject: 'Restablecer tu contraseña del ECE', html }),
+      })
+      if (!envio.ok) return responder(502, { error: `No se pudo enviar el correo (${envio.status}): ${await envio.text()}` })
+      return responder(200, generico)
+    }
 
     // ¿Quién llama? Debe ser personal de Sistemas activo
     const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '')
@@ -53,8 +91,6 @@ Deno.serve(async (req) => {
     if (!yo || !yo.activo || !vigente || yo.rol !== 'admin_sistema') {
       return responder(403, { error: 'Solo Sistemas puede crear cuentas o restablecer contraseñas.' })
     }
-
-    const cuerpo = await req.json()
 
     // Crear cuentas: { accion: 'crear', usuarios: ['12345', 'med-0456', …] }
     if (cuerpo.accion === 'crear') {

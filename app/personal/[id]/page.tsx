@@ -29,7 +29,12 @@ export default async function UsuarioPage({ params }: PageProps<'/personal/[id]'
   const supabase = await crearClienteServidor()
   const { data: u } = await supabase.schema('seguridad').from('v_personal').select('*').eq('id', id).maybeSingle()
   if (!u) notFound()
-  const { areas, servicios } = await opcionesPersonal()
+  const [{ areas, servicios }, { data: recs }] = await Promise.all([
+    opcionesPersonal(),
+    supabase.schema('seguridad').from('recuperacion_solicitud').select('id, resultado, creado_en').eq('usuario_id', id).order('creado_en', { ascending: false }).limit(5),
+  ])
+  const recuperaciones = (recs ?? []) as { id: number; resultado: string; creado_en: string }[]
+  const RESULTADO: Record<string, string> = { enviado: 'enlace enviado', sin_correo: 'sin correo registrado', inactivo: 'cuenta inactiva', limite: 'rechazada por límite', no_existe: '—' }
   const e = ESTADO_CUENTA[u.estado_cuenta as string]
   const inicial: DatosUsuario = {
     usuario: u.usuario,
@@ -73,6 +78,11 @@ export default async function UsuarioPage({ params }: PageProps<'/personal/[id]'
               </p>
             )}
             {u.debe_cambiar_contrasena && u.activo && <p className="mt-1 text-sm text-slate-600">Aún no cambia su contraseña temporal.</p>}
+            <p className="mt-1 text-sm text-slate-600">
+              {u.correo ? `Puede recuperar su contraseña por correo (${u.correo as string}).` : 'Sin correo: si olvida su contraseña, Sistemas la restablece.'}
+              {recuperaciones.length > 0 &&
+                ` Últimas solicitudes de recuperación: ${recuperaciones.map((r) => `${fechaHora(r.creado_en)} (${RESULTADO[r.resultado] ?? r.resultado})`).join('; ')}.`}
+            </p>
           </section>
           <section className={claseTarjeta}>
             <h2 className="mb-2 text-sm font-semibold text-slate-800 print:hidden">Datos</h2>

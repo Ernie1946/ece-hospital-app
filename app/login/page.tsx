@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { crearClienteNavegador } from '@/lib/supabase/client'
 import { DOMINIO_USUARIOS } from '@/lib/personal'
 
@@ -92,6 +93,9 @@ export default function LoginPage() {
         >
           {enviando ? 'Entrando…' : 'Entrar'}
         </button>
+        <Link href="/recuperar" className="block text-center text-sm text-sky-700 hover:underline">
+          ¿Olvidaste tu contraseña?
+        </Link>
       </form>
     </main>
   )

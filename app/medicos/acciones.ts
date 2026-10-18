@@ -6,6 +6,7 @@ import { crearClienteServidor } from '@/lib/supabase/server'
 import { traducirError } from '@/lib/errores'
 import { TIPOS_NOTA, type Cie10, type Medicamento } from '@/lib/medica'
 import type { Resultado } from '@/components/FormAccion'
+import { NOMBRE_COMPONENTE } from '@/lib/escalas'
 
 // Las reglas (rol, servicio, CIE-10, alergias, firma) las aplica la base;
 // aquí solo se arma lo capturado y se traduce el resultado.
@@ -133,4 +134,62 @@ export async function suspenderOrden(ordenId: string, encuentroId: string, _prev
   if (error) return { error: traducirError(error.message) }
   refrescar(encuentroId)
   return { ok: 'Orden suspendida.' }
+}
+
+// ---------------------------------------------------------------------
+// Escalas de gravedad (APACHE II, SOFA): la base calcula y guarda el puntaje
+// ---------------------------------------------------------------------
+const CAMPOS_ESCALA = [
+  'temperatura', 'tas', 'tad', 'pam', 'fc', 'fr', 'fio2', 'pao2', 'paco2', 'patm', 'ph', 'hco3', 'sodio', 'potasio',
+  'creatinina', 'hematocrito', 'leucocitos', 'glasgow', 'plaquetas', 'bilirrubina', 'uresis_ml_dia',
+]
+
+export async function registrarEscalaGravedad(encuentroId: string, _previo: Resultado, datos: FormData): Promise<Resultado> {
+  const { supabase } = await sesion()
+  const escala = texto(datos, 'escala')
+  if (escala !== 'APACHE_II' && escala !== 'SOFA') return { error: 'Elige la escala.' }
+  const p: Record<string, number | string | boolean> = {}
+  for (const c of CAMPOS_ESCALA) {
+    const v = texto(datos, c)
+    if (v === null) continue
+    const n = Number(v.replace(',', '.'))
+    if (!Number.isFinite(n)) return { error: `El valor de ${c.replaceAll('_', ' ')} no es un número.` }
+    p[c] = n
+  }
+  if (escala === 'APACHE_II') {
+    p.tipo_ingreso = texto(datos, 'tipo_ingreso') ?? 'no_quirurgico'
+    p.cronico = datos.get('cronico') === 'on'
+    p.ira = datos.get('ira') === 'on'
+  } else {
+    p.vasopresor = texto(datos, 'vasopresor') ?? 'ninguno'
+    p.soporte_ventilatorio = datos.get('soporte_ventilatorio') === 'on'
+  }
+  const fecha = texto(datos, 'evaluado_en')
+  const { data, error } = await supabase.schema('clinico').rpc('registrar_escala_gravedad', {
+    p_encuentro: encuentroId,
+    p_escala: escala,
+    p_datos: p,
+    p_evaluado_en: fecha ? new Date(`${fecha}:00-06:00`).toISOString() : null,
+  })
+  if (error) {
+    const msg = error.message.replace(/\(([a-z_, ]+)\)/, (_, l: string) => `(${l.split(', ').map((k) => NOMBRE_COMPONENTE[k] ?? k).join(', ')})`)
+    return { error: traducirError(msg) }
+  }
+  refrescar(encuentroId)
+  revalidatePath(`/medicos/encuentro/${encuentroId}/escalas`)
+  const r = data as { puntaje: number; mortalidad?: number | null } | null
+  const nombre = escala === 'APACHE_II' ? 'APACHE II' : 'SOFA'
+  return { ok: `${nombre} registrado: ${r?.puntaje ?? ''} puntos${r?.mortalidad != null ? ` (mortalidad estimada ${r.mortalidad} %)` : ''}.` }
+}
+
+export async function anularEscalaGravedad(encuentroId: string, _previo: Resultado, datos: FormData): Promise<Resultado> {
+  const { supabase } = await sesion()
+  const id = Number(datos.get('id'))
+  const motivo = texto(datos, 'motivo')
+  if (!motivo) return { error: 'Escribe el motivo de la anulación.' }
+  const { error } = await supabase.schema('clinico').rpc('anular_escala_gravedad', { p_id: id, p_motivo: motivo })
+  if (error) return { error: traducirError(error.message) }
+  refrescar(encuentroId)
+  revalidatePath(`/medicos/encuentro/${encuentroId}/escalas`)
+  return { ok: 'Evaluación anulada.' }
 }

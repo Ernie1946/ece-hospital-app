@@ -42,6 +42,7 @@ import { ListaResultados } from '@/components/ListaResultados'
 import { ListaHemodinamia } from '@/components/ListaHemodinamia'
 import { sugerencias, type DiagnosticoEnf, type EvaluacionPlan, type PlanCuidado } from '@/lib/cuidados'
 import { cerrarPlanCuidado, crearPlanCuidado, evaluarPlanCuidado } from '../../acciones'
+import { AVPU, RIESGO_NEWS, news2 } from '@/lib/escalas'
 import { NOMBRE_NOTA, PRIORIDADES, TIPOS_NOTA_MEDICA, TITULOS_CAMPOS, TIPO_ORDEN, estadoOrden, idsDuplicadas } from '@/lib/medica'
 
 // ---------------------------------------------------------------------
@@ -49,7 +50,15 @@ import { NOMBRE_NOTA, PRIORIDADES, TIPOS_NOTA_MEDICA, TITULOS_CAMPOS, TIPO_ORDEN
 // nota del turno con firma electrónica.
 // ---------------------------------------------------------------------
 
-type SignosFila = Signos & { id: number; tomado_en: string; peso_kg: number | null; talla_cm: number | null; registrado_por: string }
+type SignosFila = Signos & { id: number; tomado_en: string; peso_kg: number | null; talla_cm: number | null; registrado_por: string; oxigeno_suplementario: boolean | null; conciencia: string | null }
+
+// NEWS2 de una toma de signos (solo adultos, ≥ 16 años)
+function newsDe(s: SignosFila) {
+  return news2({
+    fr: s.frecuencia_respiratoria, spo2: s.spo2, o2: s.oxigeno_suplementario, tas: s.ta_sistolica,
+    fc: s.frecuencia_cardiaca, conciencia: s.conciencia, temp: s.temperatura === null ? null : Number(s.temperatura),
+  })
+}
 type Escala = { id: number; tipo: string; puntaje: number; registrado_en: string; registrado_por: string }
 type Liquido = {
   id: number
@@ -214,6 +223,9 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
   const puedeRegistrar = esEnfermeria && puedeVer && vigente
 
   const listaSignos = (signos.data ?? []) as SignosFila[]
+  const edadAnios = edad(p.fecha_nacimiento as string | null)
+  const conNews = edadAnios !== null && edadAnios >= 16
+  const newsActual = conNews && listaSignos[0] ? newsDe(listaSignos[0]) : null
   const listaEscalas = (escalas.data ?? []) as Escala[]
   const listaLiquidos = (liquidos.data ?? []) as Liquido[]
   const listaNotas = (notas.data ?? []) as Nota[]
@@ -538,7 +550,18 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
 
               {/* Signos vitales */}
               <section className={claseTarjeta}>
-                <h2 className="text-sm font-semibold text-slate-800">Signos vitales (últimas 24 h)</h2>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-sm font-semibold text-slate-800">Signos vitales (últimas 24 h)</h2>
+                  {newsActual?.riesgo && (
+                    <span className={`rounded-md border px-2 py-1 text-xs font-semibold ${RIESGO_NEWS[newsActual.riesgo].clase}`}>
+                      NEWS2 {newsActual.puntaje} · {RIESGO_NEWS[newsActual.riesgo].texto}
+                      {!newsActual.completo && ` (${newsActual.parametros}/7 parámetros)`}
+                    </span>
+                  )}
+                </div>
+                {newsActual?.riesgo && newsActual.riesgo !== 'bajo' && (
+                  <p className="mt-2 text-xs text-slate-600">{RIESGO_NEWS[newsActual.riesgo].accion}.</p>
+                )}
                 {puedeRegistrar && (
                   <FormAccion accion={registrarSignos.bind(null, id)} boton="Registrar signos" className="mt-3 space-y-3">
                     <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
@@ -552,7 +575,20 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
                       <Campo nombre="glucosa_capilar" titulo="Glucosa capilar" unidad="mg/dL" />
                       <Campo nombre="peso_kg" titulo="Peso" unidad="kg" paso="0.1" />
                       <Campo nombre="talla_cm" titulo="Talla" unidad="cm" paso="0.1" />
+                      <label className={claseEtiqueta}>
+                        Estado de conciencia <span className="font-normal text-slate-400">(ACVPU)</span>
+                        <select name="conciencia" defaultValue="" className={claseCampo}>
+                          <option value="">—</option>
+                          {AVPU.map(([v, t]) => (
+                            <option key={v} value={v}>{v} · {t}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="flex items-center gap-2 self-end pb-2 text-sm text-slate-700">
+                        <input type="checkbox" name="oxigeno_suplementario" className="h-4 w-4" /> Con oxígeno suplementario
+                      </label>
                     </div>
+                    {conNews && <p className="text-xs text-slate-500">Con FR, SpO₂, oxígeno, TA, FC, conciencia y temperatura se calcula la escala NEWS2 de alerta temprana.</p>}
                   </FormAccion>
                 )}
                 {listaSignos.length === 0 ? (
@@ -567,6 +603,9 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
                           {COLUMNAS_SIGNOS.map((c) => (
                             <th key={c.campo} className="py-1.5 pr-3 font-medium">{c.titulo}</th>
                           ))}
+                          <th className="py-1.5 pr-3 font-medium">O₂</th>
+                          <th className="py-1.5 pr-3 font-medium">Conc.</th>
+                          {conNews && <th className="py-1.5 pr-3 font-medium">NEWS2</th>}
                           <th className="py-1.5 pr-3 font-medium">Registró</th>
                         </tr>
                       </thead>
@@ -582,6 +621,16 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
                                 {s[c.campo] ?? '—'}
                               </td>
                             ))}
+                            <td className="py-1.5 pr-3">{s.oxigeno_suplementario === null ? '—' : s.oxigeno_suplementario ? 'Sí' : 'No'}</td>
+                            <td className={`py-1.5 pr-3 ${s.conciencia && s.conciencia !== 'A' ? 'text-red-700 font-semibold' : ''}`}>{s.conciencia ?? '—'}</td>
+                            {conNews && (() => {
+                              const n = newsDe(s)
+                              return (
+                                <td className="py-1.5 pr-3">
+                                  {n.riesgo ? <span className={`rounded border px-1.5 text-xs font-semibold ${RIESGO_NEWS[n.riesgo].clase}`}>{n.puntaje}{n.completo ? '' : '*'}</span> : '—'}
+                                </td>
+                              )
+                            })()}
                             <td className="py-1.5 pr-3 text-slate-500">{quien.get(s.registrado_por) ?? '—'}</td>
                           </tr>
                         ))}
@@ -589,6 +638,7 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
                     </table>
                     <p className="mt-1 text-xs text-slate-500">
                       En rojo, fuera de rango para adulto (p. ej. T &gt; {RANGO_ALERTA.temperatura.max} °C, SpO₂ &lt; {RANGO_ALERTA.spo2.min} %).
+                      {conNews && ' NEWS2 con * = calculado con parámetros incompletos.'}
                     </p>
                   </div>
                 )}

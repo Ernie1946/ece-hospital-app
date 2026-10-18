@@ -76,6 +76,10 @@ export async function registrarSignos(encuentroId: string, _previo: Resultado, d
     talla_cm: numero(datos, 'talla_cm'),
   }
   if (Object.values(signos).every((v) => v === null)) return { error: 'Captura al menos un signo vital.' }
+  const conciencia = texto(datos, 'conciencia')
+  if (conciencia && !['A', 'C', 'V', 'P', 'U'].includes(conciencia)) return { error: 'Estado de conciencia no válido.' }
+  // El oxígeno solo se registra junto con la SpO₂ (sin ella no tiene sentido para NEWS2)
+  const oxigeno = signos.spo2 === null ? null : datos.get('oxigeno_suplementario') === 'on'
   if ((signos.ta_sistolica === null) !== (signos.ta_diastolica === null)) {
     return { error: 'Captura la presión arterial completa (sistólica y diastólica).' }
   }
@@ -83,7 +87,7 @@ export async function registrarSignos(encuentroId: string, _previo: Resultado, d
   const { error } = await supabase
     .schema('clinico')
     .from('signos_vitales')
-    .insert({ encuentro_id: encuentroId, registrado_por: usuarioId, ...signos })
+    .insert({ encuentro_id: encuentroId, registrado_por: usuarioId, ...signos, conciencia: conciencia || null, oxigeno_suplementario: oxigeno })
   if (error) return { error: traducirError(error.message) }
 
   refrescar(encuentroId)

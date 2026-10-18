@@ -8,6 +8,9 @@ import { FormAccion } from '@/components/FormAccion'
 import { FormNotaMedica } from '@/components/FormNotaMedica'
 import { ListaResultados } from '@/components/ListaResultados'
 import { ListaHemodinamia } from '@/components/ListaHemodinamia'
+import { EscalasGravedad } from '@/components/EscalasGravedad'
+import { BadgeNews2, type News2Fila } from '@/components/BadgeNews2'
+import { RIESGO_NEWS } from '@/lib/escalas'
 import { claseCampo, claseEtiqueta, claseTarjeta } from '@/lib/estilos'
 import { ahora, edad, fechaHora, nombreCompleto } from '@/lib/formato'
 import { NOMBRE_NOTA, PRIORIDADES, TIPO_DIAGNOSTICO, TIPO_ORDEN, TIPOS_NOTA_MEDICA, TITULOS_CAMPOS, esMedico, estadoOrden, idsDuplicadas } from '@/lib/medica'
@@ -58,10 +61,10 @@ export default async function ExpedienteMedicoPage({ params }: PageProps<'/medic
   if (!encuentro) notFound()
 
   const hace24h = new Date(ahora() - 24 * 3600 * 1000).toISOString()
-  const [paciente, alergias, cama, medico, acceso, notas, ordenes, diagnosticos, signos] = await Promise.all([
+  const [paciente, alergias, cama, medico, acceso, notas, ordenes, diagnosticos, signos, newsQ] = await Promise.all([
     supabase.schema('clinico').from('paciente').select('nombre, primer_apellido, segundo_apellido, expediente, fecha_nacimiento, sexo, tipo_sangre').eq('id', encuentro.paciente_id).single(),
     supabase.schema('clinico').from('paciente_alergia').select('sustancia, severidad').eq('paciente_id', encuentro.paciente_id).eq('activa', true),
-    supabase.schema('camas').from('v_censo').select('cama, servicio_nombre, area_nombre').eq('encuentro_id', id).maybeSingle(),
+    supabase.schema('camas').from('v_censo').select('cama, servicio_nombre, area_nombre, area_tipo').eq('encuentro_id', id).maybeSingle(),
     supabase.schema('seguridad').from('usuario').select('nombre, primer_apellido').eq('id', encuentro.medico_tratante_id).maybeSingle(),
     supabase.schema('clinico').rpc('puede_ver_encuentro', { p_encuentro: id }),
     supabase
@@ -93,7 +96,9 @@ export default async function ExpedienteMedicoPage({ params }: PageProps<'/medic
       .gte('tomado_en', hace24h)
       .order('tomado_en', { ascending: false })
       .limit(1),
+    supabase.schema('clinico').from('v_news2').select('encuentro_id, puntaje, riesgo, completo, qsofa').eq('encuentro_id', id).maybeSingle(),
   ])
+  const news = newsQ.data as News2Fila | null
 
   const p = paciente.data
   if (!p) notFound()
@@ -316,7 +321,19 @@ export default async function ExpedienteMedicoPage({ params }: PageProps<'/medic
                   ) : (
                     <p className="mt-1 text-sm text-slate-500">Sin signos en 24 h.</p>
                   )}
+                  {news?.riesgo && (
+                    <p className="mt-2 text-xs">
+                      <BadgeNews2 n={news} /> <span className="text-slate-600">{RIESGO_NEWS[news.riesgo].accion}.</span>
+                    </p>
+                  )}
                 </section>
+
+                <EscalasGravedad
+                  encuentroId={id}
+                  edad={edad(p.fecha_nacimiento as string | null)}
+                  areaCritica={cama.data?.area_tipo === 'critico'}
+                  puedeRegistrar={puedeEscribir}
+                />
 
                 <section className={claseTarjeta}>
                   <h2 className="text-sm font-semibold text-slate-800">Diagnósticos</h2>

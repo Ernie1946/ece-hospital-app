@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { obtenerPerfil } from '@/lib/perfil'
 import { Encabezado } from '@/components/Encabezado'
+import { BadgeNews2, type News2Fila } from '@/components/BadgeNews2'
 import { SinAlta } from '@/components/SinAlta'
 import { FormAccion } from '@/components/FormAccion'
 import { claseTarjeta } from '@/lib/estilos'
@@ -120,6 +121,11 @@ export default async function EnfermeriaPage({ searchParams }: PageProps<'/enfer
     if (!ultimosSignos.has(s.encuentro_id)) ultimosSignos.set(s.encuentro_id, s)
   }
 
+  const { data: newsData } = enPiso.length
+    ? await supabase.schema('clinico').from('v_news2').select('encuentro_id, puntaje, riesgo, completo, qsofa').in('encuentro_id', enPiso.map((c) => c.encuentro_id!))
+    : { data: [] }
+  const newsDe = new Map(((newsData ?? []) as News2Fila[]).map((n) => [n.encuentro_id, n]))
+
   const esEnfermeria = perfil.rol === 'enfermeria'
 
   return (
@@ -231,6 +237,7 @@ export default async function EnfermeriaPage({ searchParams }: PageProps<'/enfer
                       </p>
                     )}
                     <div className="mt-1 flex flex-wrap gap-1 text-xs">
+                      <BadgeNews2 n={newsDe.get(c.encuentro_id!)} />
                       {c.servicio_nombre && <span className="rounded bg-sky-50 px-1 text-sky-900">{c.servicio_nombre}</span>}
                       {c.tipo_lugar !== 'cama' && <span className="rounded bg-slate-100 px-1">{TIPO_LUGAR[c.tipo_lugar]?.nombre}</span>}
                       {c.alergias && <span className="rounded bg-red-100 px-1 text-red-800 font-medium">Alergia: {c.alergias}</span>}

@@ -6,6 +6,7 @@ import { SinAlta } from '@/components/SinAlta'
 import { claseTarjeta } from '@/lib/estilos'
 import { ahora, fechaHora, nombreCompleto } from '@/lib/formato'
 import { esMedico } from '@/lib/medica'
+import { BadgeNews2, type News2Fila } from '@/components/BadgeNews2'
 
 // ---------------------------------------------------------------------
 // Tablero médico: mis pacientes, pacientes del servicio, notas de
@@ -69,6 +70,13 @@ export default async function MedicosPage({ searchParams }: PageProps<'/medicos'
     ? await supabase.schema('camas').from('v_censo').select('cama, encuentro_id, alergias').in('encuentro_id', idsMios)
     : { data: [] }
   const camaDe = new Map((camasMias ?? []).map((c) => [c.encuentro_id as string, c]))
+
+  // NEWS2 (alerta temprana, adultos) con los últimos signos de 24 h
+  const idsNews = Array.from(new Set([...idsMios, ...delServicio.map((c) => c.encuentro_id!)]))
+  const { data: newsData } = idsNews.length
+    ? await supabase.schema('clinico').from('v_news2').select('encuentro_id, puntaje, riesgo, completo, qsofa').in('encuentro_id', idsNews)
+    : { data: [] }
+  const newsDe = new Map(((newsData ?? []) as News2Fila[]).map((n) => [n.encuentro_id, n]))
 
   // Pendientes
   const hace72h = new Date(ahora() - 72 * 3600 * 1000).toISOString()
@@ -158,7 +166,9 @@ export default async function MedicosPage({ searchParams }: PageProps<'/medicos'
                     >
                       <div className="flex items-center justify-between">
                         <span className="font-semibold text-slate-900">{(c?.cama as string) ?? 'Sin cama'}</span>
-                        <span className="text-xs text-slate-500">Folio {e.folio}</span>
+                        <span className="flex items-center gap-1 text-xs text-slate-500">
+                          <BadgeNews2 n={newsDe.get(e.id)} /> Folio {e.folio}
+                        </span>
                       </div>
                       <p className="text-sm font-medium text-slate-900">{e.paciente ? nombreCompleto(e.paciente) : '—'}</p>
                       {e.diagnostico_presuntivo && <p className="text-xs text-slate-600">Dx: {e.diagnostico_presuntivo}</p>}
@@ -206,6 +216,7 @@ export default async function MedicosPage({ searchParams }: PageProps<'/medicos'
                       </span>
                       {c.medico_tratante && <span className="text-slate-500">Dr(a). {c.medico_tratante}</span>}
                       {c.alergias && <span className="rounded bg-red-100 px-1 text-xs text-red-800">Alergia: {c.alergias}</span>}
+                      <BadgeNews2 n={newsDe.get(c.encuentro_id!)} />
                     </Link>
                   </li>
                 ))}

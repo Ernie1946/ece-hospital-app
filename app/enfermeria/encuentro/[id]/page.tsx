@@ -8,7 +8,7 @@ import { FormAccion } from '@/components/FormAccion'
 import { FormLiquidos } from '@/components/FormLiquidos'
 import { CampoDictado } from '@/components/CampoDictado'
 import { claseCampo, claseEtiqueta, claseTarjeta } from '@/lib/estilos'
-import { ahora, edad, fechaHora, nombreCompleto } from '@/lib/formato'
+import { ahora, edad, edadDetalle, edadTextoCorto, fechaHora, nombreCompleto } from '@/lib/formato'
 import {
   COLOR_NIVEL,
   ESCALAS,
@@ -40,6 +40,7 @@ import { ESTADO_DOSIS, cantidad, horaCorta } from '@/lib/farmacia'
 import { PlanCuidados } from '@/components/PlanCuidados'
 import { ListaResultados } from '@/components/ListaResultados'
 import { ListaHemodinamia } from '@/components/ListaHemodinamia'
+import { EscalasGravedad } from '@/components/EscalasGravedad'
 import { sugerencias, type DiagnosticoEnf, type EvaluacionPlan, type PlanCuidado } from '@/lib/cuidados'
 import { cerrarPlanCuidado, crearPlanCuidado, evaluarPlanCuidado } from '../../acciones'
 import { AVPU, RIESGO_NEWS, news2 } from '@/lib/escalas'
@@ -314,7 +315,7 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
               </span>
             </div>
             <p className="mt-1 text-sm text-slate-600">
-              Exp. {p.expediente} · {p.sexo} · {p.fecha_nacimiento ? `${edad(p.fecha_nacimiento)} años` : 'edad desconocida'}
+              Exp. {p.expediente} · {p.sexo} · {edadTextoCorto(edadDetalle(p.fecha_nacimiento as string | null))}
               {p.tipo_sangre ? ` · ${p.tipo_sangre}` : ''} · Ingreso {fechaHora(encuentro.inicio as string | null)}
               {medico.data && ` · Dr(a). ${medico.data.nombre} ${medico.data.primer_apellido}`}
             </p>
@@ -643,6 +644,13 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
                   </div>
                 )}
               </section>
+
+              <EscalasGravedad
+                encuentroId={id}
+                ed={edadDetalle(p.fecha_nacimiento as string | null)}
+                areaCritica={false}
+                puedeRegistrar={puedeRegistrar}
+              />
 
               <div className="grid lg:grid-cols-2 gap-4">
                 {/* Escalas */}

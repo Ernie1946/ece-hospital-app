@@ -61,3 +61,21 @@ export const SEXO: Record<string, string> = { H: 'Hombre', M: 'Mujer', NE: 'No e
 export function ahora() {
   return Date.now()
 }
+
+// Edad en años, meses y días cumplidos (zona de Chihuahua), para escalas pediátricas
+export function edadDetalle(fechaNacimiento: string | null | undefined) {
+  if (!fechaNacimiento) return null
+  const [a, m, d] = fechaNacimiento.split('-').map(Number)
+  const hoy = new Date(new Date().toLocaleString('en-US', { timeZone: ZONA }))
+  let meses = (hoy.getFullYear() - a) * 12 + (hoy.getMonth() + 1 - m)
+  if (hoy.getDate() < d) meses--
+  const dias = Math.round((Date.UTC(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()) - Date.UTC(a, m - 1, d)) / 86400000)
+  return { anios: Math.floor(meses / 12), meses, dias }
+}
+
+export function edadTextoCorto(e: { anios: number; meses: number; dias: number } | null) {
+  if (!e) return 'edad desconocida'
+  if (e.dias < 31) return `${e.dias} ${e.dias === 1 ? 'día' : 'días'}`
+  if (e.meses < 24) return `${e.meses} ${e.meses === 1 ? 'mes' : 'meses'}`
+  return `${e.anios} años`
+}

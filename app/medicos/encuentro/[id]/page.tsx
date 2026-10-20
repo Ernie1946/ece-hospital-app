@@ -12,7 +12,7 @@ import { EscalasGravedad } from '@/components/EscalasGravedad'
 import { BadgeNews2, type News2Fila } from '@/components/BadgeNews2'
 import { RIESGO_NEWS } from '@/lib/escalas'
 import { claseCampo, claseEtiqueta, claseTarjeta } from '@/lib/estilos'
-import { ahora, edad, fechaHora, nombreCompleto } from '@/lib/formato'
+import { ahora, edadDetalle, edadTextoCorto, fechaHora, nombreCompleto } from '@/lib/formato'
 import { NOMBRE_NOTA, PRIORIDADES, TIPO_DIAGNOSTICO, TIPO_ORDEN, TIPOS_NOTA_MEDICA, TITULOS_CAMPOS, esMedico, estadoOrden, idsDuplicadas } from '@/lib/medica'
 import { buscarCie10, buscarMedicamentos, cofirmarNota, registrarNotaMedica, suspenderOrden } from '../../acciones'
 import { solicitarAccesoEmergencia } from '../../../enfermeria/acciones'
@@ -168,7 +168,7 @@ export default async function ExpedienteMedicoPage({ params }: PageProps<'/medic
               </span>
             </div>
             <p className="mt-1 text-sm text-slate-600">
-              Exp. {p.expediente} · {p.sexo} · {p.fecha_nacimiento ? `${edad(p.fecha_nacimiento)} años` : 'edad desconocida'}
+              Exp. {p.expediente} · {p.sexo} · {edadTextoCorto(edadDetalle(p.fecha_nacimiento as string | null))}
               {p.tipo_sangre ? ` · ${p.tipo_sangre}` : ''} · Ingreso {fechaHora(encuentro.inicio as string | null)}
               {medico.data && ` · Tratante: Dr(a). ${medico.data.nombre} ${medico.data.primer_apellido}`}
             </p>
@@ -330,7 +330,7 @@ export default async function ExpedienteMedicoPage({ params }: PageProps<'/medic
 
                 <EscalasGravedad
                   encuentroId={id}
-                  edad={edad(p.fecha_nacimiento as string | null)}
+                  ed={edadDetalle(p.fecha_nacimiento as string | null)}
                   areaCritica={cama.data?.area_tipo === 'critico'}
                   puedeRegistrar={puedeEscribir}
                 />

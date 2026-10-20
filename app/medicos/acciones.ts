@@ -7,6 +7,7 @@ import { traducirError } from '@/lib/errores'
 import { TIPOS_NOTA, type Cie10, type Medicamento } from '@/lib/medica'
 import type { Resultado } from '@/components/FormAccion'
 import { NOMBRE_COMPONENTE } from '@/lib/escalas'
+import { ESCALAS_GRAVEDAD, NOMBRE_COMPONENTE_PED, type ClaveEscala } from '@/lib/escalas-ped'
 
 // Las reglas (rol, servicio, CIE-10, alergias, firma) las aplica la base;
 // aquí solo se arma lo capturado y se traduce el resultado.
@@ -192,4 +193,45 @@ export async function anularEscalaGravedad(encuentroId: string, _previo: Resulta
   refrescar(encuentroId)
   revalidatePath(`/medicos/encuentro/${encuentroId}/escalas`)
   return { ok: 'Evaluación anulada.' }
+}
+
+// Escalas pediátricas y neonatales: la pantalla manda los datos de la escala en JSON
+const ESCALAS_PED = ['PIM3', 'PELOD2', 'PSOFA', 'COMFORT_B', 'PEWS', 'SNAPPE_II', 'CRIB_II', 'NSOFA', 'SILVERMAN', 'NPASS']
+
+export async function registrarEscalaPed(encuentroId: string, _previo: Resultado, datos: FormData): Promise<Resultado> {
+  const { supabase } = await sesion()
+  const escala = texto(datos, 'escala')
+  if (!escala || !ESCALAS_PED.includes(escala)) return { error: 'Elige la escala.' }
+  let p: Record<string, unknown>
+  try {
+    p = JSON.parse(String(datos.get('datos') ?? '{}'))
+  } catch {
+    return { error: 'Datos no válidos.' }
+  }
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return { error: 'Datos no válidos.' }
+  const limpio: Record<string, number | string | boolean> = {}
+  for (const [k, v] of Object.entries(p)) {
+    if (!/^[a-z0-9_]{1,40}$/.test(k)) continue
+    if (typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v))) limpio[k] = v
+    else if (typeof v === 'string' && v.length <= 40) limpio[k] = v
+  }
+  const fecha = texto(datos, 'evaluado_en')
+  const { data, error } = await supabase.schema('clinico').rpc('registrar_escala_gravedad', {
+    p_encuentro: encuentroId,
+    p_escala: escala,
+    p_datos: limpio,
+    p_evaluado_en: fecha ? new Date(`${fecha}:00-06:00`).toISOString() : null,
+  })
+  if (error) {
+    const msg = error.message.replace(/\(([a-z0-9_, ]+)\)/, (_, l: string) => `(${l.split(', ').map((k) => NOMBRE_COMPONENTE_PED[k] ?? NOMBRE_COMPONENTE[k] ?? k).join(', ')})`)
+    return { error: traducirError(msg) }
+  }
+  refrescar(encuentroId)
+  revalidatePath(`/medicos/encuentro/${encuentroId}/escalas`)
+  const r = data as { puntaje: number; mortalidad?: number | null; sedacion?: number } | null
+  const nombre = ESCALAS_GRAVEDAD[escala as ClaveEscala].nombre
+  if (escala === 'PIM3') return { ok: `PIM3 registrado: mortalidad estimada ${r?.mortalidad} %.` }
+  return {
+    ok: `${nombre} registrado: ${r?.puntaje} puntos${r?.mortalidad != null ? ` (mortalidad estimada ${r.mortalidad} %)` : ''}${escala === 'NPASS' ? ` · sedación ${r?.sedacion}` : ''}.`,
+  }
 }

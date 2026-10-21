@@ -13,6 +13,7 @@ export const ETIQUETA_ROL: Record<string, string> = {
   trabajo_social: 'Trabajo social',
   admision: 'Admisión',
   caja: 'Caja',
+  costos: 'Costos y finanzas',
   almacen: 'Almacén',
   mantenimiento: 'Mantenimiento',
   comedor: 'Comedor',

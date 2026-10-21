@@ -134,7 +134,7 @@ export function ImportarCatalogo({ importar }: { importar: (filas: FilaCatalogo[
           )}
           {resultado && !resultado.error && (
             <div role="status" className="rounded bg-emerald-50 px-3 py-2 text-emerald-900">
-              Importación terminada: {resultado.nuevos} nuevo(s), {resultado.actualizados} actualizado(s), {resultado.lotes} lote(s) de inventario.
+              Importación terminada: {resultado.nuevos} nuevo(s), {resultado.actualizados} actualizado(s), {resultado.lotes} lote(s) de inventario. Los precios nuevos o cambiados quedan en espera de autorización de Costos.
               {(resultado.errores?.length ?? 0) > 0 && (
                 <ul className="mt-1 text-xs text-red-800">
                   {resultado.errores!.map((e) => (

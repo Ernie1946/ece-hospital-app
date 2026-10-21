@@ -506,8 +506,11 @@ async function Catalogo({ puede }: { puede: boolean }) {
   const { data } = await supabase
     .schema('catalogo')
     .from('medicamento')
-    .select('id, clave, denominacion_generica, nombre_comercial, concentracion, forma_farmaceutica, via_default, unidad_dosis, dosis_maxima_dia, grupo_controlado, alto_riesgo, activo, concepto_cargo(precio)')
+    .select('id, clave, denominacion_generica, nombre_comercial, concentracion, forma_farmaceutica, via_default, unidad_dosis, dosis_maxima_dia, grupo_controlado, alto_riesgo, activo, concepto_cargo_id')
     .order('denominacion_generica')
+  // Precio vigente (autorizado por Costos) y el propuesto en espera
+  const { data: precios } = await supabase.schema('catalogo').from('v_articulo').select('id, precio, precio_propuesto').eq('tipo', 'medicamento')
+  const precioDe = new Map(((precios ?? []) as { id: number; precio: number | null; precio_propuesto: number | null }[]).map((p) => [p.id, p]))
   const meds = (data ?? []) as unknown as {
     id: number
     clave: string
@@ -521,8 +524,9 @@ async function Catalogo({ puede }: { puede: boolean }) {
     grupo_controlado: string | null
     alto_riesgo: boolean
     activo: boolean
-    concepto_cargo: { precio: number } | null
+    concepto_cargo_id: number
   }[]
+  const dinero = (n: number) => `$${Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
   return (
     <div className="space-y-3">
       {puede && (
@@ -563,7 +567,16 @@ async function Catalogo({ puede }: { puede: boolean }) {
                     {m.grupo_controlado && <span className="rounded bg-purple-100 px-1 text-xs text-purple-800">Grupo {m.grupo_controlado}</span>}
                   </td>
                   <td className="py-1 pr-2 text-right">
-                    {m.concepto_cargo ? `$${Number(m.concepto_cargo.precio).toLocaleString('es-MX', { minimumFractionDigits: 2 })}` : '—'}
+                    {(() => {
+                      const p = precioDe.get(m.concepto_cargo_id)
+                      if (!p) return '—'
+                      return (
+                        <>
+                          {p.precio === null ? <span className="text-slate-400">sin precio</span> : dinero(p.precio)}
+                          {p.precio_propuesto !== null && <span className="block text-xs text-violet-700">{dinero(p.precio_propuesto)} por autorizar</span>}
+                        </>
+                      )
+                    })()}
                   </td>
                 </tr>
               ))}

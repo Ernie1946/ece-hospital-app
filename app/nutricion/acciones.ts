@@ -79,7 +79,7 @@ export async function entregarCharola(id: string): Promise<Resultado> {
   const { error } = await supabase.schema('nutricion').rpc('entregar', { p_charola: id, p_entregada: true })
   if (error) return { error: traducirError(error.message) }
   refrescar()
-  return { ok: 'Entregada y cargada.' }
+  return { ok: 'Entregada.' }
 }
 
 export async function noEntregada(id: string, _previo: Resultado, datos: FormData): Promise<Resultado> {
@@ -97,7 +97,7 @@ export async function entregarArea(fecha: string, tiempo: string, area: string):
   const { data, error } = await supabase.schema('nutricion').rpc('entregar_area', { p_fecha: fecha, p_tiempo: tiempo, p_area: area })
   if (error) return { error: traducirError(error.message) }
   refrescar()
-  return { ok: `${data} charola(s) entregadas y cargadas.` }
+  return { ok: `${data} charola(s) entregadas.` }
 }
 
 export async function guardarTipoDieta(id: number | null, _previo: Resultado, datos: FormData): Promise<Resultado> {
@@ -109,10 +109,18 @@ export async function guardarTipoDieta(id: number | null, _previo: Resultado, da
     p_clave: texto(datos, 'clave'),
     p_nombre: texto(datos, 'nombre'),
     p_es_ayuno: datos.get('es_ayuno') === '1',
+    p_cobro_aparte: datos.get('cobro_aparte') === '1',
     p_activo: id === null ? true : datos.get('activo') === '1',
     p_precio: precio ? Number(precio) : null,
   })
   if (error) return { error: traducirError(error.message) }
   refrescar()
-  return { ok: id === null ? 'Dieta agregada. Su precio queda por autorizar en Costos.' : 'Cambios guardados.' }
+  return {
+    ok:
+      id === null
+        ? datos.get('cobro_aparte') === '1' && datos.get('es_ayuno') !== '1'
+          ? 'Dieta agregada. Se cobra aparte: su precio queda por autorizar en Costos.'
+          : 'Dieta agregada (incluida en el día-cama).'
+        : 'Cambios guardados.',
+  }
 }

@@ -32,7 +32,7 @@ export const RESTRICCIONES = [
   'vegetariana',
 ]
 
-export type TipoDieta = { id: number; clave: string; nombre: string; es_ayuno: boolean; activo: boolean; concepto_cargo_id: number | null }
+export type TipoDieta = { id: number; clave: string; nombre: string; es_ayuno: boolean; activo: boolean; concepto_cargo_id: number | null; cobro_aparte: boolean }
 
 // Fecha de hoy y el siguiente tiempo de comida según la hora de Chihuahua
 export function hoyChihuahua() {

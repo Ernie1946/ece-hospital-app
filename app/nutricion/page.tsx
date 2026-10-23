@@ -80,6 +80,7 @@ type Charola = {
   motivo: string | null
   entregada_en: string | null
   entregada_por: string | null
+  cargo_id: number | null
   precio: number | null
   precio_pendiente: boolean | null
 }
@@ -163,7 +164,7 @@ async function Tablero({ area, puede }: { area: string; puede: boolean }) {
   const supabase = await crearClienteServidor()
   const [filasQ, tiposQ] = await Promise.all([
     supabase.schema('nutricion').from('v_tablero_dietas').select('*'),
-    supabase.schema('catalogo').from('tipo_dieta').select('id, clave, nombre, es_ayuno, activo, concepto_cargo_id').eq('activo', true).order('nombre'),
+    supabase.schema('catalogo').from('tipo_dieta').select('id, clave, nombre, es_ayuno, activo, concepto_cargo_id, cobro_aparte').eq('activo', true).order('nombre'),
   ])
   const todas = (filasQ.data ?? []) as FilaDieta[]
   const tipos = (tiposQ.data ?? []) as TipoDieta[]
@@ -430,7 +431,7 @@ async function Charolas({ fecha, tiempo, area, puede }: { fecha: string; tiempo:
                   <BotonAccion
                     etiqueta={`Entregar todas (${programadas})`}
                     variante="secundario"
-                    confirmar={`¿Se entregaron las ${programadas} charolas de ${g.nombre}? Se cargan a la cuenta de cada paciente.`}
+                    confirmar={`¿Se entregaron las ${programadas} charolas de ${g.nombre}?`}
                     alHacer={entregarArea.bind(null, fecha, tiempo, g.clave)}
                   />
                 </span>
@@ -488,6 +489,7 @@ async function Charolas({ fecha, tiempo, area, puede }: { fecha: string; tiempo:
                       ) : c.estado === 'entregada' ? (
                         <span className="text-xs text-emerald-800">
                           Entregada {c.entregada_en ? horaCorta(c.entregada_en) : ''}
+                          {c.cargo_id && <span className="block">Cobrada aparte</span>}
                           {c.precio_pendiente && <span className="block text-amber-800">Precio por autorizar</span>}
                         </span>
                       ) : (
@@ -517,7 +519,7 @@ async function Charolas({ fecha, tiempo, area, puede }: { fecha: string; tiempo:
 async function Tipos({ puede }: { puede: boolean }) {
   const supabase = await crearClienteServidor()
   const [tiposQ, preciosQ] = await Promise.all([
-    supabase.schema('catalogo').from('tipo_dieta').select('id, clave, nombre, es_ayuno, activo, concepto_cargo_id').order('es_ayuno', { ascending: false }).order('nombre'),
+    supabase.schema('catalogo').from('tipo_dieta').select('id, clave, nombre, es_ayuno, activo, concepto_cargo_id, cobro_aparte').order('es_ayuno', { ascending: false }).order('nombre'),
     supabase.schema('catalogo').from('v_articulo').select('id, clave, precio, precio_propuesto').eq('area_clave', 'NUT'),
   ])
   const tipos = (tiposQ.data ?? []) as TipoDieta[]
@@ -533,7 +535,7 @@ async function Tipos({ puede }: { puede: boolean }) {
             <tr>
               <th className="py-1 pr-2">Clave</th>
               <th className="pr-2">Dieta</th>
-              <th className="pr-2">Precio por charola</th>
+              <th className="pr-2">Cobro</th>
               <th className="pr-2">Estado</th>
               <th className="pr-2"></th>
             </tr>
@@ -547,10 +549,12 @@ async function Tipos({ puede }: { puede: boolean }) {
                   <td className="pr-2">{t.nombre}</td>
                   <td className="pr-2">
                     {t.es_ayuno ? (
-                      <span className="text-slate-500">No se cobra (ayuno)</span>
+                      <span className="text-slate-500">Sin charola (ayuno)</span>
+                    ) : !t.cobro_aparte ? (
+                      <span className="text-slate-600">Incluida en el día-cama</span>
                     ) : (
                       <>
-                        {pesos(p?.precio)}
+                        Aparte: {pesos(p?.precio)}
                         {p?.precio_propuesto != null && <span className="block text-xs text-amber-800">Por autorizar: {pesos(p.precio_propuesto)}</span>}
                         {p && p.precio == null && p.precio_propuesto == null && <span className="block text-xs text-amber-800">Sin precio</span>}
                       </>
@@ -573,9 +577,12 @@ async function Tipos({ puede }: { puede: boolean }) {
                           <label className="flex items-center gap-1 text-sm">
                             <input type="checkbox" name="activo" value="1" defaultChecked={t.activo} /> Activa
                           </label>
+                          <label className="flex items-center gap-1 text-sm">
+                            <input type="checkbox" name="cobro_aparte" value="1" defaultChecked={t.cobro_aparte} /> Se cobra aparte (no va incluida en la habitación)
+                          </label>
                           {!t.es_ayuno && !t.concepto_cargo_id && (
                             <label className={claseEtiqueta}>
-                              Precio por charola (sin IVA)
+                              Precio por charola si se cobra aparte (sin IVA)
                               <input name="precio" inputMode="decimal" className={claseCampo} />
                             </label>
                           )}
@@ -589,8 +596,9 @@ async function Tipos({ puede }: { puede: boolean }) {
           </tbody>
         </table>
         <p className="mt-2 text-xs text-slate-500">
-          Colación: {pesos(colacion?.precio)}
-          {colacion?.precio_propuesto != null ? ` (por autorizar: ${pesos(colacion.precio_propuesto)})` : ''}. Los precios se cambian en el{' '}
+          La alimentación del paciente va incluida en el día-cama: la charola se registra pero no se cobra. Solo las dietas marcadas «se cobra aparte»
+          generan cargo al entregarse, y también sus colaciones (colación: {pesos(colacion?.precio)}
+          {colacion?.precio_propuesto != null ? `, por autorizar: ${pesos(colacion.precio_propuesto)}` : ''}). Los precios se cambian en el{' '}
           <Link href="/catalogos/NUT" className="text-sky-700 hover:underline">
             catálogo de Nutrición
           </Link>{' '}
@@ -610,12 +618,15 @@ async function Tipos({ puede }: { puede: boolean }) {
               Nombre
               <input name="nombre" placeholder="Hipograsa" className={claseCampo} />
             </label>
+            <label className="flex items-center gap-1 text-sm">
+              <input type="checkbox" name="cobro_aparte" value="1" /> Se cobra aparte (no va incluida en la habitación)
+            </label>
             <label className={claseEtiqueta}>
-              Precio por charola (sin IVA)
+              Precio por charola si se cobra aparte (sin IVA)
               <input name="precio" inputMode="decimal" placeholder="230" className={claseCampo} />
             </label>
-            <label className="flex items-center gap-1 pt-6 text-sm">
-              <input type="checkbox" name="es_ayuno" value="1" /> Es ayuno (sin charola ni cobro)
+            <label className="flex items-center gap-1 text-sm">
+              <input type="checkbox" name="es_ayuno" value="1" /> Es ayuno (sin charola)
             </label>
           </FormAccion>
         </section>

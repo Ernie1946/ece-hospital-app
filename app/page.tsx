@@ -60,6 +60,24 @@ const ESTILO_ESTADO: Record<EstadoCama, { etiqueta: string; tarjeta: string; pun
   bloqueada:  { etiqueta: 'Bloqueada',  tarjeta: 'bg-red-50 border-red-300',         punto: 'bg-red-500' },
 }
 
+// Cada grupo de camas (área) con su color, para distinguirlos de un vistazo.
+// El fondo de la tarjeta sigue indicando el estado de la cama.
+const PALETA = [
+  { seccion: 'border-l-sky-500 bg-sky-50', franja: 'border-t-sky-500', titulo: 'text-sky-900', punto: 'bg-sky-500' },
+  { seccion: 'border-l-emerald-500 bg-emerald-50', franja: 'border-t-emerald-500', titulo: 'text-emerald-900', punto: 'bg-emerald-500' },
+  { seccion: 'border-l-violet-500 bg-violet-50', franja: 'border-t-violet-500', titulo: 'text-violet-900', punto: 'bg-violet-500' },
+  { seccion: 'border-l-amber-500 bg-amber-50', franja: 'border-t-amber-500', titulo: 'text-amber-900', punto: 'bg-amber-500' },
+  { seccion: 'border-l-pink-500 bg-pink-50', franja: 'border-t-pink-500', titulo: 'text-pink-900', punto: 'bg-pink-500' },
+  { seccion: 'border-l-teal-500 bg-teal-50', franja: 'border-t-teal-500', titulo: 'text-teal-900', punto: 'bg-teal-500' },
+  { seccion: 'border-l-indigo-500 bg-indigo-50', franja: 'border-t-indigo-500', titulo: 'text-indigo-900', punto: 'bg-indigo-500' },
+  { seccion: 'border-l-lime-600 bg-lime-50', franja: 'border-t-lime-600', titulo: 'text-lime-900', punto: 'bg-lime-600' },
+  { seccion: 'border-l-fuchsia-500 bg-fuchsia-50', franja: 'border-t-fuchsia-500', titulo: 'text-fuchsia-900', punto: 'bg-fuchsia-500' },
+  { seccion: 'border-l-orange-500 bg-orange-50', franja: 'border-t-orange-500', titulo: 'text-orange-900', punto: 'bg-orange-500' },
+  { seccion: 'border-l-cyan-600 bg-cyan-50', franja: 'border-t-cyan-600', titulo: 'text-cyan-900', punto: 'bg-cyan-600' },
+  { seccion: 'border-l-stone-500 bg-stone-100', franja: 'border-t-stone-500', titulo: 'text-stone-900', punto: 'bg-stone-500' },
+] as const
+type Color = (typeof PALETA)[number]
+
 const AISLAMIENTO: Record<string, string> = {
   contacto: 'Aislamiento de contacto',
   gotas: 'Aislamiento por gotas',
@@ -92,6 +110,8 @@ export default async function CensoPage({ searchParams }: PageProps<'/'>) {
   const elegida = areas.find((a) => a.clave === areaElegida)
   const visiblesAreas = new Set(elegida ? conSubareas(areas, elegida.id) : areas.map((a) => a.clave))
   const nombreDe = new Map(areas.map((a) => [a.id, a.nombre]))
+  // El color de cada área no cambia al filtrar: se asigna por su lugar en la lista completa
+  const colorDe = new Map(areas.filter((a) => conCamas.has(a.clave)).map((a, i) => [a.clave, PALETA[i % PALETA.length]]))
 
   // Camas agrupadas por área (con el nombre de su área principal)
   const porArea = areas
@@ -100,6 +120,7 @@ export default async function CensoPage({ searchParams }: PageProps<'/'>) {
       clave: a.clave,
       nombre: a.padre_id ? `${nombreDe.get(a.padre_id)} · ${a.nombre}` : a.nombre,
       censable: a.censable,
+      color: colorDe.get(a.clave) ?? PALETA[0],
       camas: camas.filter((c) => c.area === a.clave),
       resumen: ocupacion.find((o) => o.servicio === a.clave),
     }))
@@ -138,6 +159,10 @@ export default async function CensoPage({ searchParams }: PageProps<'/'>) {
           <Filtro href="/" activo={!areaElegida}>Todas</Filtro>
           {principales.map((a) => (
             <Filtro key={a.clave} href={`/?area=${a.clave}`} activo={areaElegida === a.clave}>
+              <span
+                className={`mr-1.5 inline-block h-2.5 w-2.5 rounded-full ${(colorDe.get(a.clave) ?? colorDe.get(areas.find((h) => h.padre_id === a.id && colorDe.has(h.clave))?.clave ?? '') ?? PALETA[0]).punto}`}
+                aria-hidden="true"
+              />
               {a.nombre}
             </Filtro>
           ))}
@@ -154,8 +179,9 @@ export default async function CensoPage({ searchParams }: PageProps<'/'>) {
 
         {/* Camas por área */}
         {porArea.map((s) => (
-          <section key={s.clave} className="space-y-2">
-            <h2 className="text-sm font-semibold text-slate-800">
+          <section key={s.clave} className={`space-y-2 rounded-xl border-l-4 p-3 ${s.color.seccion}`} aria-label={s.nombre}>
+            <h2 className={`flex flex-wrap items-center gap-x-2 text-sm font-semibold ${s.color.titulo}`}>
+              <span className={`inline-block h-3 w-3 rounded-full ${s.color.punto}`} aria-hidden="true" />
               {s.nombre}
               {s.resumen && (
                 <span className="ml-2 font-normal text-slate-500">
@@ -170,7 +196,7 @@ export default async function CensoPage({ searchParams }: PageProps<'/'>) {
             </h2>
             <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8 gap-2">
               {s.camas.map((c) => (
-                <TarjetaCama key={c.cama} cama={c} />
+                <TarjetaCama key={c.cama} cama={c} color={s.color} />
               ))}
             </div>
           </section>
@@ -181,10 +207,10 @@ export default async function CensoPage({ searchParams }: PageProps<'/'>) {
   )
 }
 
-function TarjetaCama({ cama }: { cama: Cama }) {
+function TarjetaCama({ cama, color }: { cama: Cama; color: Color }) {
   const estilo = ESTILO_ESTADO[cama.estado]
   return (
-    <article className={`rounded-lg border p-2 text-xs ${estilo.tarjeta}`}>
+    <article className={`rounded-lg border border-t-4 p-2 text-xs ${estilo.tarjeta} ${color.franja}`}>
       <div className="flex items-center justify-between">
         <span className="whitespace-nowrap font-semibold text-slate-900">
           {cama.tipo_lugar !== 'cama' && <span title={TIPO_LUGAR[cama.tipo_lugar]?.nombre}>{TIPO_LUGAR[cama.tipo_lugar]?.icono} </span>}

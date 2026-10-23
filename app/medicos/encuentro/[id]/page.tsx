@@ -63,7 +63,7 @@ export default async function ExpedienteMedicoPage({ params }: PageProps<'/medic
   if (!encuentro) notFound()
 
   const hace24h = new Date(ahora() - 24 * 3600 * 1000).toISOString()
-  const { data: dietasQ } = await supabase.schema('catalogo').from('tipo_dieta').select('id, clave, nombre, es_ayuno, activo, concepto_cargo_id').eq('activo', true).order('es_ayuno', { ascending: false }).order('nombre')
+  const { data: dietasQ } = await supabase.schema('catalogo').from('tipo_dieta').select('id, clave, nombre, es_ayuno, activo, concepto_cargo_id, cobro_aparte').eq('activo', true).order('es_ayuno', { ascending: false }).order('nombre')
   const dietas = (dietasQ ?? []) as TipoDieta[]
   const [paciente, alergias, cama, medico, acceso, notas, ordenes, diagnosticos, signos, newsQ] = await Promise.all([
     supabase.schema('clinico').from('paciente').select('nombre, primer_apellido, segundo_apellido, expediente, fecha_nacimiento, sexo, tipo_sangre').eq('id', encuentro.paciente_id).single(),

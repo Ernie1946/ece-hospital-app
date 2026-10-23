@@ -7,10 +7,12 @@ import type { Perfil } from '@/lib/perfil'
 const SECCIONES = [
   { href: '/', clave: 'censo', nombre: 'Censo' },
   { href: '/admision', clave: 'admision', nombre: 'Admisión' },
+  { href: '/urgencias', clave: 'urgencias', nombre: 'Urgencias' },
   { href: '/medicos', clave: 'medicos', nombre: 'Médicos' },
   { href: '/enfermeria', clave: 'enfermeria', nombre: 'Enfermería' },
   { href: '/anestesia', clave: 'anestesia', nombre: 'Anestesia' },
   { href: '/farmacia', clave: 'farmacia', nombre: 'Farmacia' },
+  { href: '/nutricion', clave: 'nutricion', nombre: 'Nutrición' },
   { href: '/resultados', clave: 'resultados', nombre: 'Resultados' },
   { href: '/hemodialisis', clave: 'hemodialisis', nombre: 'Hemodiálisis' },
   { href: '/gabinetes', clave: 'gabinetes', nombre: 'Gabinetes' },
@@ -37,6 +39,8 @@ export function Encabezado({
       (s.clave !== 'personal' || perfil.rol === 'admin_sistema') &&
       (s.clave !== 'catalogos' || perfil.catalogos.length > 0) &&
       (s.clave !== 'cargos' || perfil.cargos.length > 0) &&
+      (s.clave !== 'urgencias' || ['enfermeria', 'medico_tratante', 'medico_residente', 'admision', 'caja', 'costos', 'admin_sistema'].includes(perfil.rol)) &&
+      (s.clave !== 'nutricion' || ['nutricion', 'admin_sistema', 'costos'].includes(perfil.rol)) &&
       (s.clave !== 'resultados' || ['laboratorio', 'imagenologia', 'admision', 'archivo'].includes(perfil.rol)) &&
       (s.clave !== 'hemodialisis' || !!perfil.hd) &&
       (s.clave !== 'gabinetes' || perfil.gabinetes.length > 0 || ['admision', 'archivo'].includes(perfil.rol))

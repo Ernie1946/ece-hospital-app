@@ -5,15 +5,17 @@ import { obtenerPerfil } from '@/lib/perfil'
 import { Encabezado } from '@/components/Encabezado'
 import { SinAlta } from '@/components/SinAlta'
 import { FormAccion } from '@/components/FormAccion'
+import type { TipoDieta } from '@/lib/nutricion'
 import { FormNotaMedica } from '@/components/FormNotaMedica'
 import { ListaResultados } from '@/components/ListaResultados'
 import { ListaHemodinamia } from '@/components/ListaHemodinamia'
 import { EscalasGravedad } from '@/components/EscalasGravedad'
+import { DestinoPaciente } from '@/components/DestinoPaciente'
 import { BadgeNews2, type News2Fila } from '@/components/BadgeNews2'
 import { RIESGO_NEWS } from '@/lib/escalas'
 import { claseCampo, claseEtiqueta, claseTarjeta } from '@/lib/estilos'
 import { ahora, edadDetalle, edadTextoCorto, fechaHora, nombreCompleto } from '@/lib/formato'
-import { NOMBRE_NOTA, PRIORIDADES, TIPO_DIAGNOSTICO, TIPO_ORDEN, TIPOS_NOTA_MEDICA, TITULOS_CAMPOS, esMedico, estadoOrden, idsDuplicadas } from '@/lib/medica'
+import { NOMBRE_NOTA, PRIORIDADES, TIPO_DIAGNOSTICO, TIPO_ORDEN, TIPOS_NOTA_MEDICA, TITULOS_CAMPOS, NOTAS_URGENCIAS, NOTAS_HOSPITAL, esMedico, estadoOrden, idsDuplicadas } from '@/lib/medica'
 import { buscarCie10, buscarMedicamentos, cofirmarNota, registrarNotaMedica, suspenderOrden } from '../../acciones'
 import { solicitarAccesoEmergencia } from '../../../enfermeria/acciones'
 
@@ -55,12 +57,14 @@ export default async function ExpedienteMedicoPage({ params }: PageProps<'/medic
   const { data: encuentro } = await supabase
     .schema('clinico')
     .from('encuentro')
-    .select('id, folio, paciente_id, estado, medico_tratante_id, diagnostico_presuntivo, aislamiento, inicio')
+    .select('id, folio, paciente_id, tipo, estado, tipo_egreso, medico_tratante_id, diagnostico_presuntivo, aislamiento, inicio')
     .eq('id', id)
     .maybeSingle()
   if (!encuentro) notFound()
 
   const hace24h = new Date(ahora() - 24 * 3600 * 1000).toISOString()
+  const { data: dietasQ } = await supabase.schema('catalogo').from('tipo_dieta').select('id, clave, nombre, es_ayuno, activo, concepto_cargo_id').eq('activo', true).order('es_ayuno', { ascending: false }).order('nombre')
+  const dietas = (dietasQ ?? []) as TipoDieta[]
   const [paciente, alergias, cama, medico, acceso, notas, ordenes, diagnosticos, signos, newsQ] = await Promise.all([
     supabase.schema('clinico').from('paciente').select('nombre, primer_apellido, segundo_apellido, expediente, fecha_nacimiento, sexo, tipo_sangre').eq('id', encuentro.paciente_id).single(),
     supabase.schema('clinico').from('paciente_alergia').select('sustancia, severidad').eq('paciente_id', encuentro.paciente_id).eq('activa', true),
@@ -208,6 +212,11 @@ export default async function ExpedienteMedicoPage({ params }: PageProps<'/medic
             <div className="grid lg:grid-cols-5 gap-4 items-start">
               {/* Columna principal: nota nueva */}
               <div className="lg:col-span-3 space-y-4">
+                <DestinoPaciente
+                  encuentro={{ id, tipo: encuentro.tipo as string, estado: encuentro.estado as string, tipo_egreso: encuentro.tipo_egreso as string | null }}
+                  rol={perfil.rol}
+                  puedeEscribir={puedeEscribir}
+                />
                 {puedeEscribir ? (
                   <section className={claseTarjeta}>
                     <h2 className="text-sm font-semibold text-slate-800 mb-2">Nueva nota</h2>
@@ -215,9 +224,15 @@ export default async function ExpedienteMedicoPage({ params }: PageProps<'/medic
                       accion={registrarNotaMedica.bind(null, id)}
                       buscarCie10={buscarCie10}
                       buscarMedicamentos={buscarMedicamentos}
-                      tipoInicial={listaNotas.some((n) => n.tipo === 'nota_ingreso') ? 'nota_evolucion' : 'nota_ingreso'}
+                      tipoInicial={
+                        encuentro.tipo === 'urgencias'
+                          ? listaNotas.some((n) => n.tipo === 'nota_urgencias') ? 'nota_evolucion' : 'nota_urgencias'
+                          : listaNotas.some((n) => n.tipo === 'nota_ingreso') ? 'nota_evolucion' : 'nota_ingreso'
+                      }
+                      tipos={encuentro.tipo === 'urgencias' ? NOTAS_URGENCIAS : NOTAS_HOSPITAL}
                       esResidente={perfil.rol === 'medico_residente'}
                       vigentes={medVigentes}
+                      dietas={dietas}
                     />
                   </section>
                 ) : (

@@ -90,7 +90,7 @@ export async function registrarNotaMedica(encuentroId: string, _previo: Resultad
   if (!contenido.diagnostico && diagnosticos.length === 0) {
     return { error: 'Agrega al menos un diagnóstico CIE-10 o escribe el diagnóstico.' }
   }
-  if (tipo !== 'nota_interconsulta' && !contenido.pronostico) return { error: 'Falta el pronóstico.' }
+  if (!['nota_interconsulta', 'nota_traslado'].includes(tipo) && !contenido.pronostico) return { error: 'Falta el pronóstico.' }
 
   const { error } = await supabase.schema('clinico').rpc('registrar_nota_medica', {
     p_encuentro: encuentroId,
@@ -234,4 +234,54 @@ export async function registrarEscalaPed(encuentroId: string, _previo: Resultado
   return {
     ok: `${nombre} registrado: ${r?.puntaje} puntos${r?.mortalidad != null ? ` (mortalidad estimada ${r.mortalidad} %)` : ''}${escala === 'NPASS' ? ` · sedación ${r?.sedacion}` : ''}.`,
   }
+}
+
+// ---------------------------------------------------------------------
+// Destino del paciente: hospitalizar desde urgencias o dar el alta médica
+// ---------------------------------------------------------------------
+export async function hospitalizar(encuentroId: string, _previo: Resultado, datos: FormData): Promise<Resultado> {
+  const { supabase } = await sesion()
+  const servicio = texto(datos, 'servicio')
+  const tipo = texto(datos, 'tipo') ?? 'hospitalizacion'
+  const motivo = texto(datos, 'motivo')
+  // La transferencia se respalda en la nota de urgencias (o de traslado) firmada más reciente
+  const { data: nota } = await supabase
+    .schema('clinico')
+    .from('documento_clinico')
+    .select('id')
+    .eq('encuentro_id', encuentroId)
+    .in('tipo', ['nota_urgencias', 'nota_traslado'])
+    .in('estado', ['firmado', 'pendiente_cofirma'])
+    .order('creado_en', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (!nota) return { error: 'Primero firma la nota de urgencias (o de traslado) con el plan de hospitalización.' }
+  if (!servicio) return { error: 'Elige el servicio que recibe al paciente.' }
+  if (!motivo) return { error: 'Escribe el motivo del ingreso.' }
+  const { error } = await supabase.schema('clinico').rpc('transferir', {
+    p_origen: encuentroId,
+    p_tipo: tipo,
+    p_servicio_clave: servicio,
+    p_nota: nota.id,
+    p_motivo: motivo,
+    p_medico_destino: texto(datos, 'medico'),
+  })
+  if (error) return { error: traducirError(error.message) }
+  refrescar(encuentroId)
+  revalidatePath('/urgencias')
+  return { ok: 'Ingreso solicitado. Enfermería asigna la cama y registra el traslado al piso.' }
+}
+
+export async function darAlta(encuentroId: string, _previo: Resultado, datos: FormData): Promise<Resultado> {
+  const { supabase } = await sesion()
+  const tipo = texto(datos, 'tipo_egreso')
+  if (!tipo) return { error: 'Elige el tipo de egreso.' }
+  const { error } = await supabase.schema('clinico').rpc('alta_medica', { p_encuentro: encuentroId, p_tipo_egreso: tipo })
+  if (error) {
+    if (error.message.includes('exige')) return { error: 'Primero firma la nota de egreso (en urgencias, la nota de urgencias).' }
+    return { error: traducirError(error.message) }
+  }
+  refrescar(encuentroId)
+  revalidatePath('/urgencias')
+  return { ok: 'Alta médica registrada. Enfermería registra la salida del paciente.' }
 }

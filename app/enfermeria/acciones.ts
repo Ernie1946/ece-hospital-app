@@ -359,3 +359,27 @@ export async function cerrarPlanCuidado(planId: string, encuentroId: string, _pr
   refrescar(encuentroId)
   return { ok: estado === 'resuelto' ? 'Plan cerrado como resuelto.' : 'Plan suspendido.' }
 }
+
+// ---------------------------------------------------------------------
+// Salida del paciente: cama para el ingreso a piso, egreso o traslado
+// ---------------------------------------------------------------------
+export async function asignarCamaDestino(origenId: string, destinoId: string, _previo: Resultado, datos: FormData): Promise<Resultado> {
+  const { supabase } = await sesion()
+  const cama = texto(datos, 'cama')
+  if (!cama) return { error: 'Elige la cama.' }
+  const { error } = await supabase.schema('camas').rpc('reservar', { p_encuentro: destinoId, p_cama_clave: cama })
+  if (error) return { error: traducirError(error.message) }
+  refrescar(origenId)
+  revalidatePath('/urgencias')
+  return { ok: `Cama ${cama} reservada. El piso la verá en sus llegadas.` }
+}
+
+export async function registrarSalida(encuentroId: string, motivo: 'egreso' | 'traslado'): Promise<Resultado> {
+  const { supabase } = await sesion()
+  const { error } = await supabase.schema('camas').rpc('registrar_salida', { p_encuentro: encuentroId, p_motivo: motivo })
+  if (error) return { error: traducirError(error.message) }
+  refrescar(encuentroId)
+  revalidatePath('/urgencias')
+  revalidatePath('/')
+  return { ok: motivo === 'egreso' ? 'Salida registrada: el ingreso queda cerrado y la cama pasa a limpieza.' : 'Salida a piso registrada.' }
+}

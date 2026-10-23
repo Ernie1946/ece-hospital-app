@@ -18,6 +18,7 @@ import {
   type MedVigente,
   type OrdenNueva,
 } from '@/lib/medica'
+import { CONSISTENCIAS, RESTRICCIONES, type TipoDieta } from '@/lib/nutricion'
 
 type Accion = (previo: Resultado, datos: FormData) => Promise<Resultado>
 
@@ -30,6 +31,8 @@ export function FormNotaMedica({
   tipoInicial,
   esResidente,
   vigentes = [],
+  tipos,
+  dietas = [],
 }: {
   accion: Accion
   buscarCie10: (q: string) => Promise<Cie10[]>
@@ -37,6 +40,8 @@ export function FormNotaMedica({
   tipoInicial: string
   esResidente: boolean
   vigentes?: MedVigente[]
+  tipos?: string[]
+  dietas?: TipoDieta[]
 }) {
   const [tipo, setTipo] = useState(tipoInicial)
   const [diagnosticos, setDiagnosticos] = useState<DxElegido[]>([])
@@ -47,7 +52,7 @@ export function FormNotaMedica({
   const definicion = TIPOS_NOTA[tipo]
 
   function limpiar() {
-    setTipo((t) => (t === 'nota_ingreso' ? 'nota_evolucion' : t))
+    setTipo((t) => (t === 'nota_ingreso' || t === 'nota_urgencias' ? 'nota_evolucion' : t))
     setDiagnosticos([])
     setOrdenes([])
     setVersion((v) => v + 1)
@@ -63,7 +68,9 @@ export function FormNotaMedica({
       <label className={`${claseEtiqueta} max-w-xs`}>
         Tipo de nota
         <select name="tipo" value={tipo} onChange={(e) => setTipo(e.target.value)} className={claseCampo}>
-          {Object.entries(TIPOS_NOTA).map(([clave, t]) => (
+          {Object.entries(TIPOS_NOTA)
+            .filter(([clave]) => !tipos || tipos.includes(clave))
+            .map(([clave, t]) => (
             <option key={clave} value={clave}>
               {t.nombre}
             </option>
@@ -194,7 +201,18 @@ export function FormNotaMedica({
                     prioridad: o.prioridad,
                     justificacion_duplicado: o.justificacion_duplicado,
                   }
-                : o
+                : o.tipo === 'dieta'
+                  ? {
+                      tipo: o.tipo,
+                      tipo_dieta_id: o.tipo_dieta_id,
+                      consistencia: o.consistencia,
+                      restricciones: o.restricciones,
+                      kcal: o.kcal,
+                      colaciones: o.colaciones,
+                      indicaciones: o.indicaciones,
+                      prioridad: o.prioridad,
+                    }
+                  : o
             )
           )}
         />
@@ -205,6 +223,8 @@ export function FormNotaMedica({
           alAgregar={(o) => setOrdenes((os) => [...os, o])}
           alCambiar={setPendiente}
           agregadas={ordenes.length}
+          dietas={dietas}
+          hayDieta={ordenes.some((o) => o.tipo === 'dieta')}
           yaOrdenados={[
             ...vigentes,
             ...ordenes.flatMap((o) => (o.tipo === 'medicamento' ? [{ medicamento_id: o.medicamento_id, descripcion: `${resumenOrden(o)} (en esta nota)` }] : [])),
@@ -322,12 +342,16 @@ function NuevaOrden({
   alCambiar,
   agregadas,
   yaOrdenados,
+  dietas,
+  hayDieta,
 }: {
   buscarMedicamentos: (q: string) => Promise<Medicamento[]>
   alAgregar: (o: OrdenNueva) => void
   alCambiar: (pendiente: string) => void
   agregadas: number
   yaOrdenados: MedVigente[]
+  dietas: TipoDieta[]
+  hayDieta: boolean
 }) {
   const [tipo, setTipo] = useState<OrdenNueva['tipo']>('medicamento')
   const [prioridad, setPrioridad] = useState('rutina')
@@ -343,6 +367,13 @@ function NuevaOrden({
   const [indicaciones, setIndicaciones] = useState('')
   const [aviso, setAviso] = useState<string | null>(null)
   const [justificacion, setJustificacion] = useState('')
+  const [dietaId, setDietaId] = useState('')
+  const [consistencia, setConsistencia] = useState('normal')
+  const [restricciones, setRestricciones] = useState<string[]>([])
+  const [otraRestriccion, setOtraRestriccion] = useState('')
+  const [kcal, setKcal] = useState('')
+  const [colaciones, setColaciones] = useState(false)
+  const dieta = dietas.find((d) => String(d.id) === dietaId) ?? null
   // ¿El medicamento elegido ya está ordenado? (vigente o en esta misma nota)
   const duplicado = med ? yaOrdenados.filter((v) => v.medicamento_id === med.id) : []
 
@@ -352,7 +383,9 @@ function NuevaOrden({
       ? med
         ? `${med.denominacion_generica}${dosis ? ` ${dosis} ${med.unidad_dosis}` : ''}`
         : ''
-      : descripcion.trim()
+      : tipo === 'dieta'
+        ? (dieta?.nombre ?? '')
+        : descripcion.trim()
   useEffect(() => {
     alCambiar(resumenPendiente)
   }, [resumenPendiente, alCambiar])
@@ -384,6 +417,12 @@ function NuevaOrden({
     setPrioridad('rutina')
     setAviso(null)
     setJustificacion('')
+    setDietaId('')
+    setConsistencia('normal')
+    setRestricciones([])
+    setOtraRestriccion('')
+    setKcal('')
+    setColaciones(false)
   }
 
   function agregar() {
@@ -410,9 +449,30 @@ function NuevaOrden({
         prioridad,
         justificacion_duplicado: duplicado.length ? justificacion.trim() : undefined,
       })
+    } else if (tipo === 'dieta') {
+      if (!dieta) return setAviso('Elige el tipo de dieta.')
+      if (hayDieta) return setAviso('Esta nota ya lleva una dieta: quita la anterior si quieres cambiarla.')
+      const k = kcal.trim() ? Number(kcal) : null
+      if (k !== null && (!Number.isFinite(k) || k < 300 || k > 5000)) return setAviso('Las kilocalorías van de 300 a 5000.')
+      const extra = otraRestriccion
+        .split(',')
+        .map((x) => x.trim())
+        .filter(Boolean)
+      alAgregar({
+        tipo: 'dieta',
+        tipo_dieta_id: dieta.id,
+        dieta: dieta.nombre,
+        es_ayuno: dieta.es_ayuno,
+        consistencia: dieta.es_ayuno ? 'normal' : consistencia,
+        restricciones: dieta.es_ayuno ? [] : [...restricciones, ...extra],
+        kcal: dieta.es_ayuno ? null : k,
+        colaciones: !dieta.es_ayuno && colaciones,
+        indicaciones: indicaciones.trim(),
+        prioridad,
+      })
     } else {
       if (!descripcion.trim()) return setAviso('Escribe la indicación.')
-      alAgregar({ tipo, descripcion: descripcion.trim(), prioridad })
+      alAgregar({ tipo: tipo as 'estudio' | 'cuidado_enfermeria' | 'interconsulta', descripcion: descripcion.trim(), prioridad })
     }
     reiniciar()
   }
@@ -567,6 +627,73 @@ function NuevaOrden({
             </div>
           )}
         </>
+      ) : tipo === 'dieta' ? (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-end gap-2">
+            <label className={claseEtiqueta}>
+              Tipo de dieta
+              <select value={dietaId} onChange={(e) => setDietaId(e.target.value)} className={claseCampo}>
+                <option value="">Elegir…</option>
+                {dietas.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {dieta && !dieta.es_ayuno && (
+              <>
+                <label className={claseEtiqueta}>
+                  Consistencia
+                  <select value={consistencia} onChange={(e) => setConsistencia(e.target.value)} className={claseCampo}>
+                    {Object.entries(CONSISTENCIAS).map(([k, v]) => (
+                      <option key={k} value={k}>
+                        {v}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className={claseEtiqueta}>
+                  Kcal al día <span className="font-normal text-slate-400">(opcional)</span>
+                  <input value={kcal} onChange={(e) => setKcal(e.target.value)} inputMode="numeric" className={`${claseCampo} w-28`} />
+                </label>
+                <label className="flex items-center gap-1 pb-2 text-sm text-slate-700">
+                  <input type="checkbox" checked={colaciones} onChange={(e) => setColaciones(e.target.checked)} /> Con colaciones
+                </label>
+              </>
+            )}
+          </div>
+          {dieta && !dieta.es_ayuno && (
+            <fieldset>
+              <legend className="text-sm font-medium text-slate-700">Restricciones</legend>
+              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-slate-700">
+                {RESTRICCIONES.map((r) => (
+                  <label key={r} className="flex items-center gap-1">
+                    <input
+                      type="checkbox"
+                      checked={restricciones.includes(r)}
+                      onChange={(e) => setRestricciones((rs) => (e.target.checked ? [...rs, r] : rs.filter((x) => x !== r)))}
+                    />
+                    {r}
+                  </label>
+                ))}
+              </div>
+              <label className={`${claseEtiqueta} mt-1`}>
+                Otras restricciones <span className="font-normal text-slate-400">(separadas por coma)</span>
+                <input value={otraRestriccion} onChange={(e) => setOtraRestriccion(e.target.value)} className={claseCampo} />
+              </label>
+            </fieldset>
+          )}
+          <label className={claseEtiqueta}>
+            Indicaciones para Nutrición
+            <input
+              value={indicaciones}
+              onChange={(e) => setIndicaciones(e.target.value)}
+              placeholder={dieta?.es_ayuno ? 'Ayuno desde las 22:00 para cirugía…' : 'Fraccionar en 5 tomas, probar tolerancia…'}
+              className={claseCampo}
+            />
+          </label>
+        </div>
       ) : (
         <label className={claseEtiqueta}>
           Indicación
@@ -574,9 +701,7 @@ function NuevaOrden({
             value={descripcion}
             onChange={(e) => setDescripcion(e.target.value)}
             placeholder={
-              tipo === 'dieta'
-                ? 'Ayuno, dieta blanda, para diabético 1800 kcal…'
-                : tipo === 'estudio'
+              tipo === 'estudio'
                   ? 'Biometría hemática, radiografía de tórax…'
                   : tipo === 'interconsulta'
                     ? 'Cardiología: valoración preoperatoria…'

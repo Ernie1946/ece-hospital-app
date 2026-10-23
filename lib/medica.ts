@@ -28,6 +28,36 @@ export const TIPOS_NOTA: Record<string, { nombre: string; campos: CampoNota[] }>
       { clave: 'plan', titulo: 'Plan', obligatorio: true, filas: 3 },
     ],
   },
+  nota_urgencias: {
+    nombre: 'Nota de urgencias',
+    campos: [
+      { clave: 'motivo_atencion', titulo: 'Motivo de atención', obligatorio: true, filas: 2 },
+      { clave: 'padecimiento_actual', titulo: 'Padecimiento actual', filas: 3 },
+      { clave: 'antecedentes', titulo: 'Antecedentes de importancia', filas: 2 },
+      { clave: 'exploracion_fisica', titulo: 'Exploración física', obligatorio: true, filas: 3 },
+      { clave: 'resultados_estudios', titulo: 'Resultados de estudios', filas: 2 },
+      { clave: 'plan', titulo: 'Plan y destino', obligatorio: true, filas: 3, ayuda: 'Tratamiento en urgencias; alta, observación u hospitalización…' },
+    ],
+  },
+  nota_traslado: {
+    nombre: 'Nota de traslado',
+    campos: [
+      { clave: 'motivo_traslado', titulo: 'Motivo del traslado', obligatorio: true, filas: 2 },
+      { clave: 'resumen_evolucion', titulo: 'Resumen de la evolución', filas: 3 },
+      { clave: 'estado_actual', titulo: 'Estado actual', obligatorio: true, filas: 3 },
+      { clave: 'plan', titulo: 'Plan', filas: 2 },
+    ],
+  },
+  nota_egreso: {
+    nombre: 'Nota de egreso',
+    campos: [
+      { clave: 'motivo_egreso', titulo: 'Motivo del egreso', obligatorio: true, filas: 1, ayuda: 'Mejoría, alta voluntaria, traslado a otra unidad…' },
+      { clave: 'resumen_evolucion', titulo: 'Resumen de la evolución y estado actual', obligatorio: true, filas: 4 },
+      { clave: 'diagnosticos_finales', titulo: 'Diagnósticos finales', obligatorio: true, filas: 2 },
+      { clave: 'plan_manejo', titulo: 'Manejo y tratamiento al egreso', obligatorio: true, filas: 3, ayuda: 'Medicamentos, dieta, cuidados, cita de control…' },
+      { clave: 'problemas_pendientes', titulo: 'Problemas clínicos pendientes', filas: 2 },
+    ],
+  },
   nota_interconsulta: {
     nombre: 'Nota de interconsulta',
     campos: [
@@ -69,7 +99,27 @@ export const TITULOS_CAMPOS: Record<string, string> = {
   diagnostico: 'Diagnóstico',
   plan: 'Plan',
   sugerencias: 'Sugerencias',
+  motivo_atencion: 'Motivo de atención',
+  motivo_traslado: 'Motivo del traslado',
+  motivo_egreso: 'Motivo del egreso',
+  resumen_evolucion: 'Resumen de la evolución',
+  estado_actual: 'Estado actual',
+  diagnosticos_finales: 'Diagnósticos finales',
+  plan_manejo: 'Manejo y tratamiento al egreso',
+  problemas_pendientes: 'Problemas clínicos pendientes',
   pronostico: 'Pronóstico',
+}
+
+// Notas que se ofrecen según el tipo de ingreso
+export const NOTAS_URGENCIAS = ['nota_urgencias', 'nota_evolucion', 'nota_interconsulta']
+export const NOTAS_HOSPITAL = ['nota_ingreso', 'nota_evolucion', 'nota_interconsulta', 'nota_traslado', 'nota_egreso']
+
+export const TIPO_EGRESO: Record<string, string> = {
+  mejoria: 'Mejoría',
+  voluntario: 'Alta voluntaria',
+  traslado_externo: 'Traslado a otra unidad',
+  defuncion: 'Defunción',
+  fuga: 'Fuga',
 }
 
 export const TIPO_DIAGNOSTICO: Record<string, string> = {
@@ -147,9 +197,32 @@ export type OrdenNueva =
       prioridad: string
       justificacion_duplicado?: string
     }
-  | { tipo: 'dieta' | 'estudio' | 'cuidado_enfermeria' | 'interconsulta'; descripcion: string; prioridad: string }
+  | {
+      tipo: 'dieta'
+      tipo_dieta_id: number
+      dieta: string
+      es_ayuno: boolean
+      consistencia: string
+      restricciones: string[]
+      kcal: number | null
+      colaciones: boolean
+      indicaciones: string
+      prioridad: string
+    }
+  | { tipo: 'estudio' | 'cuidado_enfermeria' | 'interconsulta'; descripcion: string; prioridad: string }
 
 export function resumenOrden(o: OrdenNueva) {
+  if (o.tipo === 'dieta')
+    return `Dieta: ${[
+      o.dieta,
+      o.consistencia !== 'normal' && !o.es_ayuno ? `consistencia ${o.consistencia}` : '',
+      o.kcal ? `${o.kcal} kcal` : '',
+      o.restricciones.join(', '),
+      o.colaciones ? 'con colaciones' : '',
+      o.indicaciones,
+    ]
+      .filter(Boolean)
+      .join(' · ')}`
   if (o.tipo !== 'medicamento') return `${TIPO_ORDEN[o.tipo]}: ${o.descripcion}`
   const frec = o.prn
     ? `PRN${o.frecuencia_horas ? ` cada ${o.frecuencia_horas} h` : ''}`

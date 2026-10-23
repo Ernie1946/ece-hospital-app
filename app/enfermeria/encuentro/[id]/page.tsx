@@ -41,6 +41,7 @@ import { PlanCuidados } from '@/components/PlanCuidados'
 import { ListaResultados } from '@/components/ListaResultados'
 import { ListaHemodinamia } from '@/components/ListaHemodinamia'
 import { EscalasGravedad } from '@/components/EscalasGravedad'
+import { DestinoPaciente } from '@/components/DestinoPaciente'
 import { sugerencias, type DiagnosticoEnf, type EvaluacionPlan, type PlanCuidado } from '@/lib/cuidados'
 import { cerrarPlanCuidado, crearPlanCuidado, evaluarPlanCuidado } from '../../acciones'
 import { AVPU, RIESGO_NEWS, news2 } from '@/lib/escalas'
@@ -124,7 +125,7 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
   const { data: encuentro } = await supabase
     .schema('clinico')
     .from('encuentro')
-    .select('id, folio, paciente_id, tipo, estado, servicio_id, medico_tratante_id, diagnostico_presuntivo, aislamiento, inicio')
+    .select('id, folio, paciente_id, tipo, estado, tipo_egreso, servicio_id, medico_tratante_id, diagnostico_presuntivo, aislamiento, inicio')
     .eq('id', id)
     .maybeSingle()
   if (!encuentro) notFound()
@@ -644,6 +645,12 @@ export default async function HojaEnfermeriaPage({ params }: PageProps<'/enferme
                   </div>
                 )}
               </section>
+
+              <DestinoPaciente
+                encuentro={{ id, tipo: encuentro.tipo as string, estado: encuentro.estado as string, tipo_egreso: encuentro.tipo_egreso as string | null }}
+                rol={perfil.rol}
+                puedeEscribir={puedeRegistrar}
+              />
 
               <EscalasGravedad
                 encuentroId={id}
